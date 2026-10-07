@@ -1,6 +1,5 @@
-# safaoz90.github.io
+# Website
 
-Website for **Aha! Brain Puzzles**: home and support page, privacy policy, terms of use, and `app-ads.txt`.
-Published by GitHub Pages at https://safaoz90.github.io.
-
-The source lives in the game repository (`game-dev/site/`); copy changes here to publish them.
+The game's website, published at https://safaoz90.github.io from the `safaoz90.github.io` repository:
+the home and support page, privacy policy, terms of use, and `app-ads.txt` for the ad networks.
+Edit here, then copy the files to that repository. App Store Connect, AdMob and `capacitor.config.json` link to these pages.

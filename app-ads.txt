@@ -1,3 +1,3 @@
 # app-ads.txt for Aha! Brain Puzzles (developer website: https://safaoz90.github.io)
-# Lists the ad networks allowed to sell this app's ads. AppLovin and AdMob show the exact lines to add here
-# once the accounts are set up (AppLovin: MAX → app-ads.txt; AdMob: Apps → app-ads.txt).
+# Lists the ad networks allowed to sell this app's ads. AdMob shows the exact line to add here once the
+# app is registered (AdMob: Apps → your app → app-ads.txt), like: google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
