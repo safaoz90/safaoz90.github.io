@@ -1,5 +1,5 @@
-// Cozy Jigsaw — sounds, made with Web Audio (no files): a soft wooden click when a piece fits,
-// a little sparkle, a gentle "not here" thud, and a warm chord when the picture is finished.
+// Cozy Jigsaw — sounds, made with Web Audio (no files): a soft keyboard-like click when a piece fits,
+// a faint shimmer, a gentle "not here" thud, and a warm chord when the picture is finished.
 (function (root) {
   const CJ = (root.CJ = root.CJ || {});
   let ctx = null, master = null;
@@ -26,17 +26,22 @@
   CJ.Audio = {
     on: true,
     init() { ok(); },
-    // Wooden "tock": a short filtered noise tap plus a low body.
+    // Soft "thock", like a tactile mechanical keyboard key: a muffled press, then a quieter release.
     click() {
       if (!ok()) return; const t = ctx.currentTime;
-      const n = noise(0.05), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 1.4; g.gain.value = 0.9;
-      n.connect(f); f.connect(g); g.connect(master); n.start(t);
-      tone(210, t, 0.09, 0.35); tone(420, t, 0.05, 0.12, 'triangle');
+      const key = (at, vol, cut) => {
+        const n = noise(0.018), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        f.type = 'lowpass'; f.frequency.value = cut; f.Q.value = 0.7; g.gain.value = vol;
+        n.connect(f); f.connect(g); g.connect(master); n.start(at);
+      };
+      key(t, 0.55, 1700);
+      tone(160, t, 0.035, 0.14);
+      key(t + 0.045, 0.22, 1300);
     },
+    // A very quiet shimmer under the sparkle.
     sparkle() {
-      if (!ok()) return; const t = ctx.currentTime + 0.04;
-      tone(1568, t, 0.25, 0.06); tone(2093, t + 0.06, 0.3, 0.05); tone(2637, t + 0.12, 0.35, 0.035);
+      if (!ok()) return; const t = ctx.currentTime + 0.06;
+      tone(1760, t, 0.22, 0.012); tone(2349, t + 0.05, 0.26, 0.009);
     },
     nope() {
       if (!ok()) return; const t = ctx.currentTime;

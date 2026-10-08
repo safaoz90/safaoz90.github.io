@@ -1,4 +1,5 @@
-// Cozy Jigsaw — prototype screen: one photo, choose the number of pieces, play.
+// Cozy Jigsaw — prototype screen: one photo, play. ?dev shows a piece-count picker for testing
+// (in the game each level has a fixed size, see docs/PLAN.md).
 // (The seasons map, shop and daily puzzle come in milestone 3.)
 (function (root) {
   const CJ = root.CJ;
@@ -32,7 +33,7 @@
         <button class="ib eye-b" aria-label="Hold to see the picture">${I.eye}</button>
         <button class="ib hint-b" aria-label="Hint">${I.bulb}<span class="badge"></span></button>
       </header>
-      <div class="picker">${SIZES.map((k) => `<button data-n="${k}" class="${k === n ? 'on' : ''}">${k * k}</button>`).join('')}</div>
+      <div class="picker"${q.has('dev') ? '' : ' hidden'}>${SIZES.map((k) => `<button data-n="${k}" class="${k === n ? 'on' : ''}">${k * k}</button>`).join('')}</div>
       <section class="game"></section>`;
     const host = app.querySelector('.game');
     host.style.cssText = 'flex:1;display:flex;min-height:0;position:relative';
