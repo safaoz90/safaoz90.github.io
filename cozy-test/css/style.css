@@ -13,6 +13,7 @@
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 16px/1.35 -apple-system, "SF Pro Rounded", system-ui, sans-serif; overscroll-behavior: none; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #app { position: fixed; inset: 0; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+[hidden] { display: none !important; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
 
 /* Top bar of a puzzle */
