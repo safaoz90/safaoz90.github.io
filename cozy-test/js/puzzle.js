@@ -153,10 +153,9 @@
       dg.setTransform(dpr, 0, 0, dpr, 0, 0);
       dg.clearRect(0, 0, dragCv.width, dragCv.height);
       const fly = anims.filter((a) => a.fly);
-      if (!drag && !fly.length) return;
+      if (!fly.length) return;
       const hr = host.getBoundingClientRect(), ar = cv.getBoundingClientRect();
       dg.save(); dg.translate(ar.left - hr.left + ox, ar.top - hr.top + oy);
-      if (drag) drawPiece(dg, drag.p, drag.bx, drag.by, sc() * 1.04, 8);
       for (const a of fly) { const t = ease(Math.min(1, (performance.now() - a.t0) / a.ms)); drawPiece(dg, a.p, a.fx + (a.p.x - a.fx) * t, a.fy + (a.p.y - a.fy) * t, sc(), 6 * (1 - t)); }
       dg.restore();
     }
@@ -199,15 +198,40 @@
     const pointers = new Map();
     let pinch = null, pan = null, trayStart = null;
 
+    // Dragging: the piece floats a little above the finger (so the finger never hides it) and is moved
+    // as one ready-made picture with a CSS transform, once per frame, which keeps it smooth.
+    const ghost = document.createElement('canvas'); ghost.className = 'pz-ghost'; ghost.hidden = true; host.appendChild(ghost);
+    let gPad = 0, gRaf = 0, last = null, areaOff = { x: 0, y: 0 };
+    const liftPx = () => Math.min(64, Math.max(30, s * sc() * 0.45)); // gap between finger and the piece's middle, on top of half a piece
+    function liftedOff() { const c = s * sc(); return { x: -s / 2, y: -s / 2 - (c / 2 + liftPx()) / sc() }; }
+    function paintGhost(p) {
+      const z = sc() * 1.05, size = (s + 2 * M) * z; gPad = Math.round(size * 0.18);
+      const w = Math.ceil(size + 2 * gPad);
+      ghost.width = Math.round(w * dpr); ghost.height = Math.round(w * dpr); ghost.style.width = ghost.style.height = w + 'px';
+      const x = ghost.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, w);
+      x.shadowColor = 'rgba(60,40,20,.38)'; x.shadowBlur = size * 0.12; x.shadowOffsetY = size * 0.06;
+      x.drawImage(p.img, gPad, gPad, size, size);
+    }
+    function placeGhost() {
+      gRaf = 0; if (!drag || !last) return;
+      const t = Math.min(1, (performance.now() - drag.t0) / 140), k = ease(t);
+      const off = { x: drag.off0.x + (drag.off.x - drag.off0.x) * k, y: drag.off0.y + (drag.off.y - drag.off0.y) * k };
+      const b = toBoard(last.x, last.y);
+      drag.bx = b.x + off.x; drag.by = b.y + off.y;
+      const z = sc() * 1.05, X = areaOff.x + ox + (drag.bx - M) * sc() - ((s + 2 * M) * (z - sc())) / 2 - gPad, Y = areaOff.y + oy + (drag.by - M) * sc() - ((s + 2 * M) * (z - sc())) / 2 - gPad;
+      ghost.style.transform = `translate3d(${X}px,${Y}px,0)`;
+      if (t < 1) gRaf = requestAnimationFrame(placeGhost);
+    }
     function startDrag(p, e, from) {
       CJ.Audio.init();
-      const pt = areaPt(e), cell = s * sc();
-      // From the tray the piece sits just above the finger, so the finger doesn't hide it.
-      const off = from === 'tray' ? { x: -(s / 2), y: -(s / 2) - Math.min(70, cell * 0.9) / sc() } : { x: p.lx - toBoard(pt.x, pt.y).x, y: p.ly - toBoard(pt.x, pt.y).y };
-      const b = toBoard(pt.x, pt.y);
-      drag = { p, from, off, bx: b.x + off.x, by: b.y + off.y, id: e.pointerId };
-      if (from === 'tray') { p.state = 'dragging'; refreshTray(); }
-      else p.state = 'dragging';
+      const pt = areaPt(e), b = toBoard(pt.x, pt.y);
+      const hr = host.getBoundingClientRect(), ar = cv.getBoundingClientRect(); areaOff = { x: ar.left - hr.left, y: ar.top - hr.top };
+      const off = liftedOff();
+      const off0 = from === 'tray' ? off : { x: p.lx - b.x, y: p.ly - b.y };
+      drag = { p, from, off, off0, t0: performance.now(), bx: b.x + off0.x, by: b.y + off0.y, id: e.pointerId };
+      p.state = 'dragging'; if (from === 'tray') refreshTray();
+      paintGhost(p); last = pt; ghost.hidden = false; placeGhost();
+      CJ.Audio.pick && CJ.Audio.pick();
       // The finger is followed on the whole page (the tray item it started on disappears).
       const mv = (ev) => { if (drag && ev.pointerId === drag.id) moveDrag(ev); };
       const fin = (ev) => { if (!drag || ev.pointerId !== drag.id) return; root.removeEventListener('pointermove', mv); root.removeEventListener('pointerup', fin); root.removeEventListener('pointercancel', fin); endDragAt(ev); };
@@ -215,15 +239,15 @@
       draw();
     }
     function moveDrag(e) {
-      const pt = areaPt(e), b = toBoard(pt.x, pt.y);
-      drag.bx = b.x + drag.off.x; drag.by = b.y + drag.off.y;
-      drawDrag();
+      last = areaPt(e);
+      if (!gRaf) gRaf = requestAnimationFrame(placeGhost);
     }
     function endDrag(e) {
       const p = drag.p, tr = tray.getBoundingClientRect();
-      const overTray = e.clientY > tr.top - 8;
-      drag = null;
-      if (overTray) { p.state = 'tray'; refreshTray(); draw(); changed(); return; }
+      drag = null; ghost.hidden = true; cancelAnimationFrame(gRaf); gRaf = 0;
+      // Back to the tray: dropped on the tray, or below the board where there's no room to keep it.
+      const below = drag_by + s / 2 > B + s * 0.45;
+      if (e.clientY > tr.top - 8 || below) { p.state = 'tray'; refreshTray(); draw(); changed(); return; }
       if (Math.hypot(p.x - drag_bx, p.y - drag_by) < s * 0.3) return place(p, drag_bx, drag_by);
       // Wrong place: it stays loose. Right on top of another slot, it is nudged off so the gap shows.
       let x = drag_bx, y = drag_by;
@@ -231,14 +255,14 @@
       if (cc >= 0 && rr >= 0 && cc < n && rr < n && Math.hypot(x - cc * s, y - rr * s) < s * 0.3) {
         x = cc * s + s * 0.16; y = rr * s - s * 0.16; CJ.Audio.nope();
       }
-      // Keep it on screen.
+      // Keep the whole piece on screen.
       const tl = toBoard(0, 0), br = toBoard(W, H);
-      p.lx = Math.min(br.x - s * 0.6, Math.max(tl.x - s * 0.4, x)); p.ly = Math.min(br.y - s * 0.6, Math.max(tl.y - s * 0.4, y));
+      p.lx = Math.min(br.x - s - M * 0.6, Math.max(tl.x + M * 0.6, x)); p.ly = Math.min(br.y - s - M * 0.6, Math.max(tl.y + M * 0.6, y));
       p.state = 'loose'; p.z = ++zTop;
       draw(); changed();
     }
     let drag_bx = 0, drag_by = 0;
-    const endDragAt = (e) => { drag_bx = drag.bx; drag_by = drag.by; endDrag(e); };
+    const endDragAt = (e) => { last = areaPt(e); cancelAnimationFrame(gRaf); placeGhost(); cancelAnimationFrame(gRaf); drag_bx = drag.bx; drag_by = drag.by; endDrag(e); };
 
     function place(p, fx, fy, fly) {
       p.state = 'snapping';
@@ -371,6 +395,8 @@
       state,
       get done() { return done; },
       get pieces() { return P; },
+      // For tests: where the finger must be for a dragged piece's top-left corner to land on (bx, by).
+      fingerFor(bx, by) { const o = liftedOff(), a = cv.getBoundingClientRect(); return { x: a.left + ox + (bx - o.x) * sc(), y: a.top + oy + (by - o.y) * sc() }; },
       // For tests: board point → page point.
       pagePoint(bx, by) { const a = cv.getBoundingClientRect(); return { x: a.left + ox + bx * sc(), y: a.top + oy + by * sc() }; },
       destroy() { ro.disconnect(); cancelAnimationFrame(raf); host.innerHTML = ''; host.classList.remove('pz'); },

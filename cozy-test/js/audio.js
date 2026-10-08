@@ -1,63 +1,86 @@
-// Cozy Jigsaw — sounds, made with Web Audio (no files): a soft keyboard-like click when a piece fits,
-// a faint shimmer, a gentle "not here" thud, and a warm chord when the picture is finished.
+// Cozy Jigsaw — sounds from recorded files (assets/sounds), played with Web Audio:
+//   pick (a piece is lifted), snap (it fits), nope (wrong spot), done (picture finished),
+//   and a calm background recording per season that loops seamlessly and fades between seasons.
+// Which file plays for what is set in CJ.SOUNDS (js/sounds.js).
 (function (root) {
   const CJ = (root.CJ = root.CJ || {});
-  let ctx = null, master = null;
-  const ok = () => {
+  const AC = root.AudioContext || root.webkitAudioContext;
+  let ctx = null, fx = null, amb = null;
+  const buffers = new Map(), loading = new Map();
+  function ensure() {
+    if (!AC) return false;
     if (!ctx) {
-      const AC = root.AudioContext || root.webkitAudioContext;
-      if (!AC) return false;
-      ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+      ctx = new AC();
+      fx = ctx.createGain(); fx.gain.value = 0.7; fx.connect(ctx.destination);
+      amb = ctx.createGain(); amb.gain.value = 1; amb.connect(ctx.destination);
     }
     if (ctx.state === 'suspended') ctx.resume();
-    return CJ.Audio.on;
-  };
-  function noise(dur) {
-    const b = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate), d = b.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
-    const s = ctx.createBufferSource(); s.buffer = b; return s;
+    return true;
   }
-  function tone(freq, t, dur, vol, type = 'sine') {
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type; o.frequency.setValueAtTime(freq, t);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  function load(url) {
+    if (buffers.has(url)) return Promise.resolve(buffers.get(url));
+    if (!loading.has(url)) loading.set(url, fetch(url).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => { buffers.set(url, buf); return buf; }).catch(() => null));
+    return loading.get(url);
+  }
+  function play(name, vol = 1) {
+    if (!CJ.Audio.on || !ensure()) return;
+    const S = CJ.SOUNDS || {}, list = [].concat(S[name] || []); if (!list.length) return;
+    const url = list[Math.floor(Math.random() * list.length)];
+    const go = (buf) => { if (!buf) return; const src = ctx.createBufferSource(), g = ctx.createGain(); g.gain.value = vol * (S.volume && S.volume[name] != null ? S.volume[name] : 1); src.buffer = buf; src.playbackRate.value = 0.97 + Math.random() * 0.06; src.connect(g); g.connect(fx); src.start(); };
+    const b = buffers.get(url); if (b) go(b); else load(url).then(go);
   }
   CJ.Audio = {
     on: true,
-    init() { ok(); },
-    // Soft "thock", like a tactile mechanical keyboard key: a muffled press, then a quieter release.
-    click() {
-      if (!ok()) return; const t = ctx.currentTime;
-      const key = (at, vol, cut) => {
-        const n = noise(0.018), f = ctx.createBiquadFilter(), g = ctx.createGain();
-        f.type = 'lowpass'; f.frequency.value = cut; f.Q.value = 0.7; g.gain.value = vol;
-        n.connect(f); f.connect(g); g.connect(master); n.start(at);
-      };
-      key(t, 0.55, 1700);
-      tone(160, t, 0.035, 0.14);
-      key(t + 0.045, 0.22, 1300);
+    init() { if (ensure()) Object.values(CJ.SOUNDS || {}).flat().filter((u) => typeof u === 'string').forEach(load); },
+    pick() { play('pick', 0.6); },
+    click() { play('snap'); },
+    sparkle() {},
+    nope() { play('nope', 0.8); },
+    done() { play('done'); },
+  };
+
+  // ---------------------------------------------------------------- season background
+  let cur = null, music = null;
+  // Calm piano under every season, much quieter than the background; starts once and keeps going.
+  function startMusic() {
+    if (music || !CJ.SOUNDS || !CJ.SOUNDS.music) return;
+    music = { pending: true };
+    load(CJ.SOUNDS.music).then((buf) => {
+      if (!buf || !music || !music.pending) return;
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = buf; src.loop = true; g.gain.value = 0.0001; src.connect(g); g.connect(amb); src.start();
+      g.gain.setTargetAtTime(0.16, ctx.currentTime, 2);
+      music = { src, g };
+    });
+  }
+  function stopMusic() { if (!music) return; const m = music; music = null; if (m.g) { m.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.5); setTimeout(() => { try { m.src.stop(); } catch (_) {} }, 2500); } }
+  CJ.Ambience = {
+    volume: 0.45,
+    play(sid) {
+      if (!ensure()) return;
+      if (cur && cur.sid === sid) return;
+      const url = (CJ.SOUNDS && CJ.SOUNDS.ambience && CJ.SOUNDS.ambience[sid]) || null;
+      this.stop(true);
+      startMusic();
+      if (!url) return;
+      const me = { sid }; cur = me;
+      load(url).then((buf) => {
+        if (cur !== me || !buf) return;
+        const src = ctx.createBufferSource(), g = ctx.createGain();
+        src.buffer = buf; src.loop = true; g.gain.value = 0.0001; src.connect(g); g.connect(amb);
+        src.start(0, Math.random() * Math.max(0, buf.duration - 5));
+        g.gain.setTargetAtTime(this.volume, ctx.currentTime, 1.2);
+        me.src = src; me.g = g;
+      });
     },
-    // A very quiet shimmer under the sparkle.
-    sparkle() {
-      if (!ok()) return; const t = ctx.currentTime + 0.06;
-      tone(1760, t, 0.22, 0.012); tone(2349, t + 0.05, 0.26, 0.009);
-    },
-    nope() {
-      if (!ok()) return; const t = ctx.currentTime;
-      tone(140, t, 0.12, 0.25); tone(110, t + 0.03, 0.12, 0.15);
-    },
-    done() {
-      if (!ok()) return; const t = ctx.currentTime;
-      [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.11, 0.9, 0.12, 'triangle'));
-      [1568, 2093].forEach((f, i) => tone(f, t + 0.5 + i * 0.08, 0.6, 0.04));
+    stop(keepMusic) {
+      if (!keepMusic) stopMusic();
+      if (!cur) return;
+      const c = cur; cur = null;
+      if (c.g) { c.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.5); setTimeout(() => { try { c.src.stop(); } catch (_) {} }, 2500); }
     },
   };
-  // A light tap on the phone when a piece fits (Capacitor Haptics inside the app).
-  CJ.haptic = function () {
-    try {
-      const H = root.Capacitor && root.Capacitor.Plugins && root.Capacitor.Plugins.Haptics;
-      if (H) H.impact({ style: 'LIGHT' }); else if (navigator.vibrate) navigator.vibrate(8);
-    } catch (_) {}
-  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else ctx.resume(); });
+  // A light tap on the phone when a piece fits (replaced by js/platform.js inside the app).
+  CJ.haptic = function () { try { if (navigator.vibrate) navigator.vibrate(8); } catch (_) {} };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -32,6 +32,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .pz-area { position: relative; flex: 1; min-height: 0; touch-action: none; }
 .pz-board { position: absolute; inset: 0; display: block; touch-action: none; }
 .pz-drag { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; }
+.pz-ghost { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 6; will-change: transform; }
 .pz-filters { display: flex; gap: 8px; padding: 6px 12px; overflow-x: auto; scrollbar-width: none; }
 .pz-filters::-webkit-scrollbar { display: none; }
 .pz-chip { flex: none; height: 32px; min-width: 40px; padding: 0 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--ink-2); display: grid; place-items: center; }
