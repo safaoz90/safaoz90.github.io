@@ -238,7 +238,11 @@
       root.addEventListener('pointermove', mv); root.addEventListener('pointerup', fin); root.addEventListener('pointercancel', fin);
       draw();
     }
+    // While a piece is being dragged, the page must not start scrolling the tray or the colour chips:
+    // iOS would cancel the drag (and report the finger at 0, 0).
+    document.addEventListener('touchmove', (e) => { if (drag) e.preventDefault(); }, { passive: false });
     function moveDrag(e) {
+      if (!e.clientX && !e.clientY) return;
       last = areaPt(e);
       if (!gRaf) gRaf = requestAnimationFrame(placeGhost);
     }
@@ -262,7 +266,7 @@
       draw(); changed();
     }
     let drag_bx = 0, drag_by = 0;
-    const endDragAt = (e) => { last = areaPt(e); cancelAnimationFrame(gRaf); placeGhost(); cancelAnimationFrame(gRaf); drag_bx = drag.bx; drag_by = drag.by; endDrag(e); };
+    const endDragAt = (e) => { if (e.type !== 'pointercancel' && (e.clientX || e.clientY)) last = areaPt(e); cancelAnimationFrame(gRaf); placeGhost(); cancelAnimationFrame(gRaf); drag_bx = drag.bx; drag_by = drag.by; endDrag(e); };
 
     function place(p, fx, fy, fly) {
       p.state = 'snapping';
