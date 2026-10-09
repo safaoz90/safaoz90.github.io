@@ -56,6 +56,7 @@
   function stopMusic() { if (!music) return; const m = music; music = null; if (m.g) { m.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.5); setTimeout(() => { try { m.src.stop(); } catch (_) {} }, 2500); } }
   CJ.Ambience = {
     volume: 0.16, // background level: quiet, under the clicks
+    level: { winter: 1, spring: 0.25, summer: 0.25, fall: 0.25, halloween: 0.25 }, // the other recordings are louder than the fireplace
     play(sid) {
       if (!ensure()) return;
       if (cur && cur.sid === sid) return;
@@ -69,7 +70,7 @@
         const src = ctx.createBufferSource(), g = ctx.createGain();
         src.buffer = buf; src.loop = true; g.gain.value = 0.0001; src.connect(g); g.connect(amb);
         src.start(0, Math.random() * Math.max(0, buf.duration - 5));
-        g.gain.setTargetAtTime(this.volume, ctx.currentTime, 1.2);
+        g.gain.setTargetAtTime(this.volume * (this.level[sid] != null ? this.level[sid] : 1), ctx.currentTime, 1.2);
         me.src = src; me.g = g;
       });
     },
