@@ -56,7 +56,7 @@
   function stopMusic() { if (!music) return; const m = music; music = null; if (m.g) { m.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.5); setTimeout(() => { try { m.src.stop(); } catch (_) {} }, 2500); } }
   CJ.Ambience = {
     volume: 0.16, // background level: quiet, under the clicks
-    level: { winter: 1, spring: 0.25, summer: 0.25, fall: 0.25, halloween: 0.25 }, // the other recordings are louder than the fireplace
+    level: { winter: 1, spring: 0.25, summer: 0.25, fall: 0.0625, halloween: 0.25 }, // the other recordings are louder than the fireplace
     play(sid) {
       if (!ensure()) return;
       if (cur && cur.sid === sid) return;
