@@ -49,13 +49,13 @@
       if (!buf || !music || !music.pending) return;
       const src = ctx.createBufferSource(), g = ctx.createGain();
       src.buffer = buf; src.loop = true; g.gain.value = 0.0001; src.connect(g); g.connect(amb); src.start();
-      g.gain.setTargetAtTime(0.16, ctx.currentTime, 2);
+      g.gain.setTargetAtTime(0.06, ctx.currentTime, 2);
       music = { src, g };
     });
   }
   function stopMusic() { if (!music) return; const m = music; music = null; if (m.g) { m.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.5); setTimeout(() => { try { m.src.stop(); } catch (_) {} }, 2500); } }
   CJ.Ambience = {
-    volume: 0.45,
+    volume: 0.16, // background level: quiet, under the clicks
     play(sid) {
       if (!ensure()) return;
       if (cur && cur.sid === sid) return;
