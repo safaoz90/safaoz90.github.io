@@ -26,15 +26,16 @@
   const hintChip = () => `<button class="chip-hints" data-act="shop" aria-label="Your hints">${I.bulb}<b>${D.hints}</b></button>`;
 
   // ---------------------------------------------------------------- music
-  const music = (sid) => { if (D.music && sid) CJ.Ambience.play(sid); else CJ.Ambience.stop(); };
+  // Season sound and music play only while a puzzle is open; menus are quiet.
+  const music = (sid) => { if (D.music && sid && cur && cur.key) CJ.Ambience.play(sid); else CJ.Ambience.stop(); };
   let started = false;
-  document.addEventListener('pointerdown', () => { if (started) return; started = true; CJ.Audio.init(); music(cur ? cur.season.id : 'winter'); }, { once: true });
+  document.addEventListener('pointerdown', () => { if (started) return; started = true; CJ.Audio.init(); if (cur && cur.key) music(cur.season.id); }, { once: true });
 
   // ---------------------------------------------------------------- screens
   function leave() { if (pz) { pz.destroy(); pz = null; } closeSheet(); }
 
   function home() {
-    leave(); cur = null;
+    leave(); cur = null; music(null);
     const d = St.daily(), si = St.streakInfo(), done = St.dailyDone();
     const week = R.DAILY_REWARD.map((r, i) => `<li class="${i < si.inWeek ? 'won' : ''}${!done && i === si.inWeek % 7 ? ' today' : ''}"><i>${i < si.inWeek ? I.check : '+' + r}</i></li>`).join('');
     const seasons = CJ.SEASONS.filter(St.visible).map((s) => {
@@ -63,7 +64,7 @@
   function seasonScreen(sid) {
     leave();
     const s = season(sid), owned = St.ownsSeason(sid), p = product(s.product);
-    cur = { season: s }; music(sid);
+    cur = { season: s }; music(null);
     const tiles = s.levels.map((l) => {
       const done = St.isDone(sid, l.n), open = St.isOpen(sid, l.n), started = !!St.board(`${sid}-${l.n}`);
       return `<button class="tile${done ? ' done' : open ? ' open' : ' locked'}" data-act="level" data-n="${l.n}" aria-label="Level ${l.n}, ${l.pieces} pieces${done ? ', solved' : open ? '' : ', locked'}">
@@ -122,6 +123,12 @@
     if (spec.kind === 'daily') reward = St.finishDaily(spec.day); else St.finish(spec.key);
     const s = spec.season, nx = spec.kind === 'level' ? s.levels.find((l) => l.n === spec.n + 1) : null;
     const nextOpen = nx && St.isOpen(s.id, nx.n);
+    // The card comes after the finish shine; skip it if the player has already left this puzzle.
+    setTimeout(() => {
+      const game = app.querySelector('.game');
+      if (cur !== spec || !game) return;
+      game.appendChild(card);
+    }, 1700);
     const card = document.createElement('div');
     card.className = 'done-card';
     card.innerHTML = `<h2>${spec.kind === 'daily' ? 'Daily puzzle solved!' : 'Beautiful!'}</h2>
@@ -131,7 +138,6 @@
         <button class="btn soft" data-act="${spec.kind === 'daily' ? 'home' : 'season'}" data-id="${s.id}">${spec.kind === 'daily' ? 'Home' : s.name}</button>
         ${nx ? (nextOpen ? `<button class="btn" data-act="level" data-season="${s.id}" data-n="${nx.n}">Next level</button>` : `<button class="btn" data-act="buy" data-product="${s.product}">Open all · ${product(s.product).price}</button>`) : ''}
       </div>`;
-    app.querySelector('.game').appendChild(card);
   }
 
   function openLevel(sid, n) {
@@ -179,7 +185,7 @@
       <button class="btn soft" data-act="restore">Restore purchases</button>
       <p class="links"><a href="${CJ.Platform.site}/cozy-privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="${CJ.Platform.site}/cozy-terms.html" target="_blank" rel="noopener">Terms</a> · <a href="${CJ.Platform.site}/cozy-credits.html" target="_blank" rel="noopener">Photo credits</a></p>
       <p class="fine">Photos from Unsplash and Pixabay, by the photographers credited after each puzzle.</p>`, 'settings');
-    layer.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { D[el.dataset.set] = el.checked; St.save(); CJ.Audio.on = D.sound; if (el.dataset.set === 'music') music(cur ? cur.season.id : 'winter'); }; });
+    layer.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { D[el.dataset.set] = el.checked; St.save(); CJ.Audio.on = D.sound; if (el.dataset.set === 'music') music(cur && cur.season ? cur.season.id : null); }; });
   }
   function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.classList.add('out'), 2400); setTimeout(() => el.remove(), 2900); }
 
@@ -191,13 +197,13 @@
     daily: openDaily,
     settings: sheetSettings,
     shop: sheetShop,
+    // A hint is only spent when a piece really moves (not while a piece is being dragged, not when done).
     hint() {
-      if (!pz || pz.done) return;
-      const how = St.useHint(cur.key);
-      if (how) { pz.hint(); refreshBadge(); return; }
+      if (!pz || pz.done || !pz.canHint()) return;
+      if (St.freeLeft(cur.key) > 0 || D.hints > 0) { if (pz.hint()) St.useHint(cur.key); refreshBadge(); return; }
       sheetHint();
     },
-    'hint-own'() { if (St.useHint(cur.key)) { closeSheet(); pz && pz.hint(); refreshBadge(); } },
+    'hint-own'() { closeSheet(); if (pz && pz.canHint() && D.hints > 0 && pz.hint()) { D.hints--; St.save(); } refreshBadge(); },
     async 'hint-video'(b) {
       b.disabled = true;
       const r = await CJ.Platform.showRewarded('hint');
@@ -205,7 +211,8 @@
       if (!r.rewarded && !r.unavailable) return; // closed early: no hint
       closeSheet();
       if (r.unavailable) toast('No video right now, so this hint is on us!');
-      pz && pz.hint(); refreshBadge();
+      if (pz && !pz.hint()) { D.hints++; St.save(); toast('Saved as a hint for later.'); } // watched, but nothing to place right now
+      refreshBadge();
     },
     async buy(b) {
       const id = b.dataset.product; b.disabled = true;

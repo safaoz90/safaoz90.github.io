@@ -6,7 +6,7 @@
   const Cap = root.Capacitor;
   const native = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
   const plugin = (name) => (native && Cap.registerPlugin ? Cap.registerPlugin(name) : null);
-  const KEYS = Object.assign({ revenuecat: '' }, root.CJ_KEYS || {});
+  const KEYS = Object.assign({ revenuecat: 'appl_LSvDTQNYpjqSkgEKaXyATxkMSTn' }, root.CJ_KEYS || {}); // RevenueCat public iOS key (safe to ship)
 
   // A browser stand-in for a rewarded video: a short countdown the player can watch or close.
   function fakeVideo() {

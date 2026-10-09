@@ -288,7 +288,7 @@
       done = true; finishT = performance.now();
       setTimeout(() => CJ.Audio.done(), 250);
       animate();
-      setTimeout(() => opts.onDone && opts.onDone(), 1700);
+      opts.onDone && opts.onDone(); // right away, so the solve is saved even if the player leaves during the finish
     }
 
     function hitLoose(pt) {
@@ -394,10 +394,12 @@
 
     return {
       hint,
+      canHint: () => !done && !drag && P.some((p) => p.state === 'tray' || p.state === 'loose'),
       peek(on) { peekOn = !!on; draw(); },
       ghost(on) { ghostOn = on == null ? !ghostOn : !!on; draw(); changed(); return ghostOn; },
       state,
       get done() { return done; },
+      get zoom() { return zoom; },
       get pieces() { return P; },
       // For tests: where the finger must be for a dragged piece's top-left corner to land on (bx, by).
       fingerFor(bx, by) { const o = liftedOff(), a = cv.getBoundingClientRect(); return { x: a.left + ox + (bx - o.x) * sc(), y: a.top + oy + (by - o.y) * sc() }; },
