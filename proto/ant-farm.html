@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ant Farm</title>
+<style>
+  :root { --ink: #3b2a1c; --soft: #7a6450; }
+  html, body { margin: 0; height: 100%; background: #2a1a10; color: var(--ink);
+    font: 600 16px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "Segoe UI", sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  body { display: flex; flex-direction: column; align-items: center; touch-action: none; }
+  header { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; padding: calc(8px + env(safe-area-inset-top)) 16px 6px; box-sizing: border-box; color: #f6e7c8; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: #c9b08c; font-size: 13px; font-weight: 500; }
+  button { border: 0; background: #fff; color: var(--ink); font: inherit; border-radius: 14px; padding: 9px 14px; box-shadow: 0 2px 0 #b89a6c; }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  canvas { display: block; touch-action: none; border-radius: 20px; }
+  .msg { color: #e6d2b0; font-size: 14px; font-weight: 500; text-align: center; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); max-width: 380px; }
+  .over { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(20,12,6,.45); }
+  .over.on { display: flex; }
+  .card { background: #fff; border-radius: 24px; padding: 24px 26px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.3); max-width: 300px; }
+  .card h2 { margin: 0 0 6px; font-size: 24px; }
+  .card p { margin: 0 0 16px; color: var(--soft); font-weight: 500; }
+  .card .col { display: flex; flex-direction: column; gap: 10px; }
+  .primary { background: #e0603c; color: #fff; box-shadow: 0 3px 0 #a8401f; padding: 12px 22px; }
+  .ad { position: fixed; inset: 0; background: #111; color: #fff; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; font-size: 18px; }
+  .ad.on { display: flex; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Ant Farm</h1><div class="sub">Level 12 · medium</div></div>
+  <button id="reset">Restart</button>
+</header>
+<canvas id="c"></canvas>
+<div class="msg" id="msg">Tap a food pile. An ant takes the <b>top</b> item to a chamber of its colour, or parks it on the shelf. Don't let the shelf fill up!</div>
+<div class="over" id="lose"><div class="card"><h2>Shelf is full! 😵</h2><p>No room to park this one.</p><div class="col"><button class="primary" id="video">▶ Watch a video: +1 shelf spot</button><button id="retry">Try again</button></div></div></div>
+<div class="over" id="win"><div class="card"><h2>Pantry sorted! 🐜</h2><p id="winTxt"></p><button class="primary" id="again">Play again</button></div></div>
+<div class="ad" id="ad"><div>Test video</div><div id="adN" style="font-size:40px">3</div></div>
+<script>
+(() => {
+  // ================================================================ level (from the solver: random tapping wins ~1%, a careful player ~45%)
+  const LEVEL = { piles: [[2,2,1,0,3,1],[3,0,2,3,0,0],[0,2,1,0,1,1],[2,1,3,0,1,1],[3,2,3,0,0,1]], orders: [3,0,3,2,1,1,2,1,0,0] };
+  const NEED = 3, OPEN = 3;
+  const FOOD = [ // colour, kind
+    { c: '#e5484d', d: '#a8232c', k: 'berry' }, { c: '#4b7be5', d: '#2a4fa8', k: 'blue' },
+    { c: '#f2b632', d: '#b57d10', k: 'seed' }, { c: '#5cb85c', d: '#2f7d32', k: 'leaf' },
+  ];
+  const VW = 390, VH = 680;
+  const PX = [55, 125, 195, 265, 335], GROUND = 112, CORR = 200, GAL = 300, CHX = [80, 195, 310], CHY = 490, DOOR = 420;
+  const cv = document.getElementById('c'), g = cv.getContext('2d');
+  let k = 1, dpr = 1;
+  let S, V, ants, slots, pending, over, pulls, genColor, sparks = [];
+
+  function layout() {
+    dpr = Math.min(3, window.devicePixelRatio || 1);
+    const maxW = Math.min(window.innerWidth, 480) - 16, maxH = window.innerHeight - 150;
+    k = Math.min(maxW / VW, maxH / VH);
+    cv.style.width = VW * k + 'px'; cv.style.height = VH * k + 'px'; cv.width = VW * k * dpr; cv.height = VH * k * dpr;
+  }
+  const nicheX = (j) => [75, 135, 195, 255, 315, 362][j];
+
+  // ================================================================ logic (instant, same rules as the solver)
+  function reset() {
+    slots = 5;
+    S = { piles: LEVEL.piles.map((p) => p.slice()), niche: Array(6).fill(null), ch: LEVEL.orders.slice(0, OPEN).map((c) => ({ c, got: 0, gen: 0 })), q: LEVEL.orders.slice(OPEN) };
+    genColor = S.ch.map((x) => [x.c]); pulls = S.ch.map(() => ({}));
+    V = { ch: S.ch.map((x) => ({ gen: 0, c: x.c, n: 0, seal: 0 })), niche: Array(6).fill(null), shake: 0 };
+    ants = []; pending = null; over = false; sparks = [];
+    ['lose', 'win'].forEach((id) => document.getElementById(id).classList.remove('on'));
+  }
+  function deliver(c) {
+    const i = S.ch.findIndex((x) => x.c === c && x.got < NEED); if (i < 0) return null;
+    return deliverTo(i);
+  }
+  function deliverTo(i) {
+    const x = S.ch[i], ev = { slot: i, gen: x.gen }; x.got++;
+    if (x.got === NEED) refill(i);
+    return ev;
+  }
+  function refill(i) {
+    const c = S.q.length ? S.q.shift() : null, gen = S.ch[i].gen + 1;
+    S.ch[i] = { c, got: 0, gen }; genColor[i][gen] = c;
+    if (c == null) return;
+    for (let j = 0; j < 6; j++) if (S.niche[j] === c && S.ch[i].c === c && S.ch[i].got < NEED && S.ch[i].gen === gen) {
+      S.niche[j] = null; (pulls[i][gen] = pulls[i][gen] || []).push(j); deliverTo(i);
+    }
+  }
+  function tap(p) {
+    if (over || !S.piles[p].length) return;
+    const c = S.piles[p].pop();
+    const ev = deliver(c);
+    if (ev) return spawnToChamber(p, c, ev);
+    const j = [...Array(slots).keys()].find((j) => S.niche[j] == null && V.niche[j] == null) ?? [...Array(slots).keys()].find((j) => S.niche[j] == null);
+    if (j != null) { S.niche[j] = c; return spawnToNiche(p, c, j); }
+    // no chamber, no shelf room: stuck
+    pending = { p, c }; over = true; V.shake = 1; S.piles[p].push(c);
+    setTimeout(() => document.getElementById('lose').classList.add('on'), 600);
+  }
+
+  // ================================================================ ants (visuals that follow the logic)
+  const down = (x) => [[x, GROUND - 4], [x, CORR], [195, CORR], [195, GAL]];
+  function ant(x, y, carry, steps) { const a = { x, y, carry, steps, ang: 0, dir: 1, gait: Math.random() * 6, i: Math.random() * 9, alpha: 0 }; ants.push(a); return a; }
+  function goHome(a, fromX) { a.steps.push(...[[fromX, GAL], [195, GAL], [195, CORR], [PX[Math.floor(Math.random() * 5)], CORR]].map((p) => ({ to: p })), { to: null, fade: true }); }
+  function chamberIn(i, gen, carry) {
+    const cx = CHX[i];
+    return [{ to: [cx, GAL] }, { to: [cx, DOOR] }, { wait: () => V.ch[i].gen === gen && !V.ch[i].seal },
+      { to: [cx + (V.ch[i].n - 1) * 24, CHY + 6], dyn: () => [cx + (Math.min(V.ch[i].n, 2) - 1) * 24, CHY + 6] },
+      { act: (a) => { a.carry = null; V.ch[i].n++; if (V.ch[i].n === NEED) V.ch[i].seal = 0.001; } }, { to: [cx, DOOR] }];
+  }
+  function spawnToChamber(p, c, ev) {
+    const a = ant(PX[p], GROUND - 4, c, [...down(PX[p]).map((t) => ({ to: t })), ...chamberIn(ev.slot, ev.gen, c)]);
+    goHome(a, CHX[ev.slot]);
+  }
+  function spawnToNiche(p, c, j) {
+    const x = nicheX(j);
+    const a = ant(PX[p], GROUND - 4, c, [...down(PX[p]).map((t) => ({ to: t })), { to: [x, GAL] }, { wait: () => V.niche[j] == null }, { to: [x, GAL - 18] }, { act: (a) => { V.niche[j] = a.carry; a.carry = null; } }, { to: [x, GAL] }]);
+    goHome(a, x);
+  }
+  function spawnPull(i, gen, j) { // an ant fetches a parked item into a chamber that just opened
+    const x = nicheX(j);
+    const a = ant(195, CORR, null, [{ to: [195, GAL] }, { to: [x, GAL] }, { wait: () => V.niche[j] != null }, { to: [x, GAL - 18] }, { act: (a) => { a.carry = V.niche[j]; V.niche[j] = null; } }, { to: [x, GAL] }, ...chamberIn(i, gen)]);
+    a.alpha = 1; goHome(a, CHX[i]);
+  }
+
+  // ================================================================ input
+  cv.addEventListener('pointerdown', (e) => {
+    const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / k, y = (e.clientY - r.top) / k;
+    if (y > GROUND + 30) return;
+    const p = PX.findIndex((px) => Math.abs(px - x) < 34); if (p >= 0) { tap(p); bounce[p] = 1; }
+  });
+  const bounce = [0, 0, 0, 0, 0];
+  document.getElementById('reset').onclick = reset;
+  document.getElementById('retry').onclick = reset;
+  document.getElementById('again').onclick = reset;
+  document.getElementById('video').onclick = () => {
+    document.getElementById('lose').classList.remove('on'); const ad = document.getElementById('ad'); ad.classList.add('on');
+    let n = 3; document.getElementById('adN').textContent = n;
+    const t = setInterval(() => { n--; document.getElementById('adN').textContent = n; if (n <= 0) { clearInterval(t); ad.classList.remove('on'); slots = Math.min(6, slots + 1); over = false; if (pending) { tap(pending.p); pending = null; } } }, 700);
+  };
+
+  // ================================================================ update
+  const SPEED = 165;
+  function update(dt) {
+    for (let n = ants.length - 1; n >= 0; n--) {
+      const a = ants[n], st = a.steps[0]; if (!st) { ants.splice(n, 1); continue; }
+      if (!st.fade) a.alpha = Math.min(1, a.alpha + dt * 4);
+      if (st.wait) { if (st.wait()) a.steps.shift(); else a.ang *= 0.9; continue; }
+      if (st.act) { st.act(a); a.steps.shift(); continue; }
+      if (st.fade) { a.alpha -= dt * 3; if (a.alpha <= 0) ants.splice(n, 1); continue; }
+      const tgt = st.dyn ? (st.fixed = st.fixed || st.dyn()) : st.to;
+      const dx = tgt[0] - a.x, dy = tgt[1] - a.y, d = Math.hypot(dx, dy), s = SPEED * dt;
+      if (d < 0.6) { a.steps.shift(); continue; }
+      const m = Math.min(1, s / d); a.x += dx * m; a.y += dy * m; a.gait += s * 0.5;
+      if (Math.abs(dx) > 0.3) a.dir = Math.sign(dx);
+      const want = Math.atan2(dy, Math.abs(dx)) * a.dir; a.ang += (want - a.ang) * Math.min(1, dt * 14);
+    }
+    V.ch.forEach((v, i) => {
+      if (!v.seal) return; v.seal += dt;
+      if (v.seal > 1.1) { // sealed: the next colour opens here, and parked items of that colour flow in
+        burst(CHX[i], CHY);
+        v.gen++; v.c = genColor[i][v.gen]; v.n = 0; v.seal = 0;
+        const gen = v.gen; (pulls[i][gen] || []).forEach((j, q) => setTimeout(() => spawnPull(i, gen, j), q * 180));
+      }
+    });
+    if (V.shake) V.shake = Math.max(0, V.shake - dt * 2);
+    bounce.forEach((b, i) => { bounce[i] = Math.max(0, b - dt * 4); });
+    if (!over && S.piles.every((p) => !p.length) && S.ch.every((x) => x.c == null) && V.ch.every((v) => v.c == null) && !document.getElementById('win').classList.contains('on')) {
+      document.getElementById('winTxt').textContent = slots > 5 ? 'Sorted, with one extra shelf spot.' : 'Sorted without extra help!';
+      setTimeout(() => document.getElementById('win').classList.add('on'), 500);
+    }
+  }
+
+  // ================================================================ drawing
+  function food(c, x, y, r, hidden) {
+    g.save(); g.translate(x, y);
+    if (hidden) { g.fillStyle = '#8a6a4a'; g.beginPath(); g.ellipse(0, 0, r, r * 0.8, 0, 0, 7); g.fill(); g.fillStyle = 'rgba(255,240,210,.55)'; g.font = `700 ${r * 1.1}px -apple-system, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 0, 1); g.restore(); return; }
+    const f = FOOD[c], gr = g.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.1); gr.addColorStop(0, '#fff8'); gr.addColorStop(0.25, f.c); gr.addColorStop(1, f.d);
+    g.fillStyle = gr; g.beginPath();
+    if (f.k === 'berry') { g.moveTo(0, r); g.bezierCurveTo(-r * 1.3, r * 0.2, -r * 0.9, -r, 0, -r * 0.7); g.bezierCurveTo(r * 0.9, -r, r * 1.3, r * 0.2, 0, r); }
+    else if (f.k === 'blue') g.arc(0, 0, r * 0.95, 0, 7);
+    else if (f.k === 'seed') g.ellipse(0, 0, r * 0.7, r, 0.3, 0, 7);
+    else { g.moveTo(-r, r * 0.3); g.quadraticCurveTo(-r * 0.6, -r, r, -r * 0.6); g.quadraticCurveTo(r * 0.5, r * 0.9, -r, r * 0.3); }
+    g.fill();
+    if (f.k === 'berry') { g.fillStyle = '#ffe58a'; for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(Math.cos(i * 2.3) * r * 0.45, Math.sin(i * 2.3) * r * 0.4, r * 0.08, 0, 7); g.fill(); } g.fillStyle = '#3f8a35'; g.beginPath(); g.ellipse(0, -r * 0.75, r * 0.45, r * 0.18, 0, 0, 7); g.fill(); }
+    if (f.k === 'blue') { g.fillStyle = f.d; g.beginPath(); g.arc(0, -r * 0.6, r * 0.22, 0, 7); g.fill(); }
+    if (f.k === 'leaf') { g.strokeStyle = '#2f7d3299'; g.lineWidth = r * 0.12; g.beginPath(); g.moveTo(-r * 0.8, r * 0.25); g.quadraticCurveTo(0, -r * 0.1, r * 0.8, -r * 0.5); g.stroke(); }
+    g.restore();
+  }
+  function tunnel(pts, w) {
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = '#3a2416'; g.lineWidth = w + 6; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+    g.strokeStyle = '#5a3a24'; g.lineWidth = w; g.stroke();
+  }
+  function drawWorld(now) {
+    // sky & grass
+    const sky = g.createLinearGradient(0, 0, 0, GROUND); sky.addColorStop(0, '#bfe3f3'); sky.addColorStop(1, '#e8f2d8'); g.fillStyle = sky; g.fillRect(0, 0, VW, GROUND);
+    // soil cross-section (the glass front of an ant farm)
+    const soil = g.createLinearGradient(0, GROUND, 0, VH); soil.addColorStop(0, '#a87547'); soil.addColorStop(1, '#6b4227'); g.fillStyle = soil; g.fillRect(0, GROUND, VW, VH - GROUND);
+    g.fillStyle = 'rgba(255,230,190,.12)'; for (let i = 0; i < 70; i++) { const x = (i * 71) % VW, y = GROUND + 20 + ((i * 131) % (VH - GROUND - 30)); g.beginPath(); g.ellipse(x, y, 3 + (i % 3) * 2, 2.4, 0, 0, 7); g.fill(); }
+    g.fillStyle = '#6aa84f'; g.fillRect(0, GROUND - 6, VW, 10);
+    g.strokeStyle = '#86c06a'; g.lineWidth = 2; for (let x = 3; x < VW; x += 6) { g.beginPath(); g.moveTo(x, GROUND - 5); g.lineTo(x + Math.sin(x) * 2, GROUND - 11 - (x % 4)); g.stroke(); }
+    // tunnels
+    PX.forEach((x) => tunnel([[x, GROUND], [x, CORR]], 16));
+    tunnel([[PX[0], CORR], [PX[4], CORR]], 18);
+    tunnel([[195, CORR], [195, GAL]], 18);
+    tunnel([[40, GAL], [370, GAL]], 18);
+    CHX.forEach((x) => tunnel([[x, GAL], [x, DOOR + 10]], 18));
+    // shelf niches
+    for (let j = 0; j < slots; j++) {
+      const x = nicheX(j); g.fillStyle = '#3a2416'; g.beginPath(); g.roundRect(x - 17, GAL - 40, 34, 34, 10); g.fill();
+      g.fillStyle = '#4e3220'; g.beginPath(); g.roundRect(x - 14, GAL - 37, 28, 28, 8); g.fill();
+      if (V.niche[j] != null) food(V.niche[j], x, GAL - 22, 10);
+    }
+    const used = V.niche.slice(0, slots).filter((x) => x != null).length;
+    g.fillStyle = used >= slots - 1 ? '#ffb4a0' : 'rgba(255,240,210,.75)'; g.font = '600 11px -apple-system, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText(`SHELF ${used}/${slots}`, 12, GAL - 52);
+    // chambers
+    CHX.forEach((cx, i) => {
+      const v = V.ch[i], sx = Math.sin((V.shake || 0) * 40) * 3 * V.shake;
+      g.save(); g.translate(sx, 0);
+      g.fillStyle = '#3a2416'; g.beginPath(); g.roundRect(cx - 52, CHY - 58, 104, 104, 30); g.fill();
+      if (v.c == null) { g.fillStyle = '#4e3220'; g.beginPath(); g.roundRect(cx - 47, CHY - 53, 94, 94, 26); g.fill(); g.fillStyle = '#9ad08a'; g.font = '700 26px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('✓', cx, CHY - 6); g.restore(); return; }
+      const f = FOOD[v.c], glow = v.seal ? Math.min(1, v.seal * 2) : 0;
+      g.fillStyle = f.c + '55'; g.beginPath(); g.roundRect(cx - 47, CHY - 53, 94, 94, 26); g.fill();
+      g.strokeStyle = f.c; g.lineWidth = 3 + glow * 3; g.stroke();
+      food(v.c, cx, CHY - 30, 9);
+      for (let s = 0; s < NEED; s++) { const x = cx + (s - 1) * 24; if (s < v.n) food(v.c, x, CHY + 10, 10 * (1 - glow * 0.3)); else { g.strokeStyle = f.c + 'aa'; g.setLineDash([3, 3]); g.lineWidth = 1.5; g.beginPath(); g.arc(x, CHY + 10, 9, 0, 7); g.stroke(); g.setLineDash([]); } }
+      g.restore();
+    });
+    // upcoming chambers
+    g.fillStyle = 'rgba(255,240,210,.75)'; g.font = '600 11px -apple-system, sans-serif'; g.textAlign = 'left'; g.fillText('NEXT ROOMS', 12, VH - 46);
+    S.q.slice(0, 7).forEach((c, i) => food(c, 20 + i * 30, VH - 24, 9));
+    // food piles on the surface (only the top item is known)
+    PX.forEach((x, p) => {
+      const pile = S.piles[p], b = Math.sin(bounce[p] * Math.PI) * 4;
+      g.fillStyle = '#3a2416'; g.beginPath(); g.ellipse(x, GROUND - 2, 12, 5, 0, 0, 7); g.fill();
+      pile.forEach((c, h) => { const top = h === pile.length - 1; food(c, x + (h % 2 ? 3 : -3) * 0, GROUND - 22 - h * 15 - (top ? b : 0), top ? 13 : 10, !top); });
+    });
+  }
+  function drawAnt(a, now) {
+    g.save(); g.globalAlpha = Math.max(0, Math.min(1, a.alpha)); g.translate(a.x, a.y - 4); g.rotate(a.ang); g.scale(a.dir * 1.2, 1.2);
+    const ph = a.gait, lift = (o) => Math.max(0, Math.sin(ph + o)) * 2.2, swing = (o) => Math.cos(ph + o) * 2.5;
+    g.strokeStyle = '#1c100a'; g.lineWidth = 1.3; g.lineCap = 'round';
+    [[-4, 0], [0, Math.PI], [4, 0]].forEach(([bx, o]) => [o, o + Math.PI].forEach((oo, side) => { g.globalAlpha = Math.max(0, Math.min(1, a.alpha)) * (side ? 1 : 0.6); g.beginPath(); g.moveTo(bx * 0.6, 1); g.lineTo(bx + swing(oo) - 1, 3 - lift(oo)); g.lineTo(bx * 1.3 + swing(oo), 5.5 - lift(oo)); g.stroke(); }));
+    g.globalAlpha = Math.max(0, Math.min(1, a.alpha));
+    const body = g.createLinearGradient(0, -5, 0, 3); body.addColorStop(0, '#7a3e24'); body.addColorStop(1, '#3a1a0e'); g.fillStyle = body;
+    g.beginPath(); g.ellipse(-6.5, -1, 5.2, 3.8, -0.15, 0, 7); g.fill(); g.beginPath(); g.ellipse(-0.5, -0.5, 2.6, 1.9, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(4.6, -1.6, 3.2, 2.9, 0.2, 0, 7); g.fill();
+    g.fillStyle = 'rgba(255,220,190,.5)'; g.beginPath(); g.ellipse(-7.5, -3, 2, 0.9, -0.2, 0, 7); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(5.6, -2.4, 1.15, 0, 7); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(5.9, -2.3, 0.7, 0, 7); g.fill();
+    const tw = Math.sin(now / 160 + a.i) * 0.6; g.strokeStyle = '#1c100a'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(5.5, -4); g.quadraticCurveTo(7, -8 + tw, 10, -7.5 + tw); g.moveTo(4.5, -4.2); g.quadraticCurveTo(6, -8.5 - tw, 8.5, -9 - tw); g.stroke();
+    if (a.carry != null) { g.scale(a.dir, 1); food(a.carry, (a.dir > 0 ? 1 : -1) * 3, -10, 7.5); }
+    g.restore();
+  }
+  function burst(x, y) { for (let i = 0; i < 26; i++) { const t = Math.random() * 7, v = 30 + Math.random() * 80; sparks.push({ x, y, vx: Math.cos(t) * v, vy: Math.sin(t) * v - 60, life: 1, c: ['#ffd166', '#fff', '#ff9f7a'][i % 3] }); } }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt);
+    g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+    drawWorld(now);
+    ants.forEach((a) => drawAnt(a, now));
+    for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.life -= dt; if (s.life <= 0) { sparks.splice(i, 1); continue; } s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 120 * dt; g.globalAlpha = s.life; g.fillStyle = s.c; g.beginPath(); g.arc(s.x, s.y, 2.4, 0, 7); g.fill(); g.globalAlpha = 1; }
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize', layout);
+  layout(); reset(); requestAnimationFrame(frame);
+  window.__farm = { S: () => S, V: () => V, ants: () => ants.length, tap, dbg: () => ants.map((a) => ({ x: Math.round(a.x), y: Math.round(a.y), c: a.carry, st: a.steps[0] && (a.steps[0].wait ? 'wait:' + a.steps[0].wait.toString().slice(6, 60) : a.steps[0].to ? 'to' : 'other') })).filter((a) => a.st && a.st.startsWith('wait')), pulls: () => pulls, gc: () => genColor };
+})();
+</script>
+</body>
+</html>
