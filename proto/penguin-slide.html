@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Penguin Slide</title>
+<style>
+  :root { --bg1: #dff1ff; --bg2: #b9dcf5; --ink: #20364d; --soft: #5d7891; }
+  html, body { margin: 0; height: 100%; background: linear-gradient(180deg, var(--bg1), var(--bg2)); color: var(--ink);
+    font: 600 16px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "Segoe UI", sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  body { display: flex; flex-direction: column; align-items: center; touch-action: none; }
+  header { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 16px 4px; box-sizing: border-box; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--soft); font-size: 13px; font-weight: 500; }
+  .btns { display: flex; gap: 8px; }
+  button { border: 0; background: #fff; color: var(--ink); font: inherit; border-radius: 14px; padding: 9px 14px; box-shadow: 0 2px 0 #9cc3e0; }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  canvas { display: block; touch-action: none; }
+  .hint { color: var(--soft); font-size: 14px; font-weight: 500; text-align: center; padding: 6px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(32,54,77,.25); }
+  .win.on { display: flex; }
+  .card { background: #fff; border-radius: 24px; padding: 24px 28px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.2); }
+  .card h2 { margin: 0 0 6px; font-size: 26px; }
+  .card p { margin: 0 0 16px; color: var(--soft); font-weight: 500; }
+  .card button { background: #3b8be0; color: #fff; box-shadow: 0 3px 0 #2563a8; padding: 12px 22px; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Penguin Slide</h1><div class="sub">Level 1 · <span id="moves">0</span> moves · best 9</div></div>
+  <div class="btns"><button id="undo">Undo</button><button id="reset">Restart</button></div>
+</header>
+<canvas id="c"></canvas>
+<div class="hint">Swipe a penguin. It slides until it bumps into something.<br>Stop each one on the igloo with its scarf colour.</div>
+<div class="win" id="win"><div class="card"><h2>All home! 🐧</h2><p id="winTxt"></p><button id="again">Play again</button></div></div>
+<script>
+(() => {
+  const LEVEL = { peng: [[3,5],[4,4],[3,0]], home: [[2,7],[0,3],[4,7]], rock: [[1,2],[1,7],[0,6],[4,1],[2,2],[0,0]] };
+  const COLORS = ['#e8505b', '#3b8be0', '#f5b829'];
+  const W = 6, H = 8;
+  const cv = document.getElementById('c'), g = cv.getContext('2d');
+  let S = 60, ox = 0, oy = 0, dpr = 1;
+  let peng, history, moves, anims = [], done = false, t0 = performance.now();
+  const rocks = new Set(LEVEL.rock.map((r) => r + ''));
+
+  function reset() {
+    peng = LEVEL.peng.map((p, i) => ({ i, x: p[0], y: p[1], dx: p[0], dy: p[1], home: false, face: 1, lean: 0, scale: 1, hop: 0, gone: false, blink: Math.random() * 4 }));
+    history = []; moves = 0; done = false; anims = []; upd();
+    document.getElementById('win').classList.remove('on');
+  }
+  const upd = () => { document.getElementById('moves').textContent = moves; };
+
+  function layout() {
+    dpr = Math.min(3, window.devicePixelRatio || 1);
+    const maxW = Math.min(window.innerWidth, 480) - 24, maxH = window.innerHeight - 170;
+    S = Math.floor(Math.min(maxW / W, maxH / H));
+    const cw = S * W + 24, ch = S * H + 24;
+    cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; cv.width = cw * dpr; cv.height = ch * dpr;
+    ox = 12; oy = 12;
+  }
+
+  // ------------------------------------------------------------ rules
+  const occupied = (x, y, self) => peng.some((p) => p !== self && !p.home && p.x === x && p.y === y);
+  function slide(p, dx, dy) {
+    let x = p.x, y = p.y;
+    for (;;) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H || rocks.has(nx + ',' + ny) || occupied(nx, ny, p)) break; x = nx; y = ny; }
+    if (x === p.x && y === p.y) { bump(p, dx, dy); return; }
+    history.push(peng.map((q) => ({ x: q.x, y: q.y, home: q.home })));
+    const dist = Math.abs(x - p.x) + Math.abs(y - p.y), fx = p.x, fy = p.y;
+    p.x = x; p.y = y; if (dx) p.face = dx;
+    const atHome = LEVEL.home[p.i][0] === x && LEVEL.home[p.i][1] === y;
+    if (atHome) p.home = true;
+    moves++; upd();
+    anims.push({ p, fx, fy, tx: x, ty: y, t: 0, dur: 140 + dist * 70, home: atHome, dx, dy });
+  }
+  function bump(p, dx, dy) { anims.push({ p, bump: true, dx, dy, t: 0, dur: 260 }); }
+  function undo() {
+    if (!history.length || anims.length) return;
+    const h = history.pop(); peng.forEach((p, k) => { Object.assign(p, h[k]); p.dx = p.x; p.dy = p.y; p.gone = p.home; p.scale = p.home ? 0 : 1; p.hop = 0; });
+    moves--; upd();
+  }
+
+  // ------------------------------------------------------------ input (swipe a penguin)
+  let start = null;
+  const cellAt = (e) => { const r = cv.getBoundingClientRect(); return [Math.floor((e.clientX - r.left - ox) / S), Math.floor((e.clientY - r.top - oy) / S)]; };
+  cv.addEventListener('pointerdown', (e) => {
+    if (done) return;
+    const [x, y] = cellAt(e); const p = peng.find((q) => !q.home && q.x === x && q.y === y);
+    start = p ? { p, sx: e.clientX, sy: e.clientY } : null; if (p) p.press = 1;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!start) return; const dx = e.clientX - start.sx, dy = e.clientY - start.sy;
+    if (Math.hypot(dx, dy) > Math.max(18, S * 0.3)) { fire(dx, dy); }
+  });
+  window.addEventListener('pointerup', () => { if (start) start.p.press = 0; start = null; });
+  function fire(dx, dy) {
+    const p = start.p; p.press = 0; start = null;
+    if (anims.some((a) => a.p === p && !a.bump)) return;
+    if (Math.abs(dx) > Math.abs(dy)) slide(p, Math.sign(dx), 0); else slide(p, 0, Math.sign(dy));
+  }
+  document.getElementById('undo').onclick = undo;
+  document.getElementById('reset').onclick = reset;
+  document.getElementById('again').onclick = reset;
+
+  // ------------------------------------------------------------ drawing
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+
+  function drawBoard(now) {
+    // snow frame
+    rr(2, 2, S * W + 20, S * H + 20, 22); g.fillStyle = '#ffffff'; g.fill();
+    g.save(); rr(ox, oy, S * W, S * H, 14); g.clip();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const gr = g.createLinearGradient(ox + x * S, oy + y * S, ox + x * S + S, oy + y * S + S);
+      const l = (x + y) % 2 ? ['#cdeafc', '#a9d6f5'] : ['#d8effd', '#b3dcf7'];
+      gr.addColorStop(0, l[0]); gr.addColorStop(1, l[1]); g.fillStyle = gr; g.fillRect(ox + x * S, oy + y * S, S, S);
+    }
+    // ice shine streaks, drifting slowly
+    g.globalAlpha = 0.35; g.strokeStyle = '#fff'; g.lineWidth = S * 0.08; g.lineCap = 'round';
+    for (let k = 0; k < 7; k++) { const sx = ((k * 97 + now * 0.004) % (W * S + 200)) - 100; g.beginPath(); g.moveTo(ox + sx, oy + k * S * 1.2); g.lineTo(ox + sx + S * 0.6, oy + k * S * 1.2 - S * 0.6); g.stroke(); }
+    g.globalAlpha = 1; g.restore();
+  }
+
+  function drawRock(x, y) {
+    const cx = ox + x * S + S / 2, cy = oy + y * S + S / 2;
+    g.fillStyle = 'rgba(30,60,90,.18)'; g.beginPath(); g.ellipse(cx, cy + S * 0.3, S * 0.4, S * 0.12, 0, 0, 7); g.fill();
+    const gr = g.createLinearGradient(cx, cy - S * 0.4, cx, cy + S * 0.35); gr.addColorStop(0, '#9aa7b4'); gr.addColorStop(1, '#5f6c79');
+    g.fillStyle = gr; g.beginPath();
+    g.moveTo(cx - S * 0.42, cy + S * 0.3); g.quadraticCurveTo(cx - S * 0.45, cy - S * 0.15, cx - S * 0.15, cy - S * 0.32);
+    g.quadraticCurveTo(cx + S * 0.1, cy - S * 0.42, cx + S * 0.3, cy - S * 0.2); g.quadraticCurveTo(cx + S * 0.46, cy + S * 0.05, cx + S * 0.4, cy + S * 0.3); g.closePath(); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.moveTo(cx - S * 0.3, cy - S * 0.18); g.quadraticCurveTo(cx - S * 0.1, cy - S * 0.42, cx + S * 0.28, cy - S * 0.2);
+    g.quadraticCurveTo(cx + S * 0.08, cy - S * 0.12, cx - S * 0.05, cy - S * 0.16); g.quadraticCurveTo(cx - S * 0.18, cy - S * 0.1, cx - S * 0.3, cy - S * 0.18); g.fill();
+  }
+
+  function drawIgloo(x, y, col, filled) {
+    const cx = ox + x * S + S / 2, cy = oy + y * S + S * 0.62, r = S * 0.4;
+    g.fillStyle = 'rgba(30,60,90,.15)'; g.beginPath(); g.ellipse(cx, cy + S * 0.1, r * 1.05, S * 0.1, 0, 0, 7); g.fill();
+    g.fillStyle = '#fbfdff'; g.beginPath(); g.arc(cx, cy, r, Math.PI, 0); g.lineTo(cx + r, cy + S * 0.06); g.lineTo(cx - r, cy + S * 0.06); g.closePath(); g.fill();
+    g.strokeStyle = '#cfe3f2'; g.lineWidth = Math.max(1, S * 0.025);
+    for (let k = 1; k < 3; k++) { g.beginPath(); g.arc(cx, cy, r, Math.PI + 0.02, -0.02); const yy = cy - r * k / 3; g.moveTo(cx - Math.sqrt(r * r - (r * k / 3) ** 2), yy); g.lineTo(cx + Math.sqrt(r * r - (r * k / 3) ** 2), yy); g.stroke(); }
+    g.fillStyle = '#2e4a66'; g.beginPath(); g.arc(cx, cy + S * 0.06, S * 0.16, Math.PI, 0); g.fill();
+    // flag in the penguin's colour
+    g.strokeStyle = '#7b8a99'; g.lineWidth = S * 0.03; g.beginPath(); g.moveTo(cx + r * 0.2, cy - r * 0.95); g.lineTo(cx + r * 0.2, cy - r * 1.45); g.stroke();
+    g.fillStyle = col; g.beginPath(); g.moveTo(cx + r * 0.2, cy - r * 1.45); g.lineTo(cx + r * 0.75, cy - r * 1.3); g.lineTo(cx + r * 0.2, cy - r * 1.15); g.fill();
+    if (filled) { g.fillStyle = col; g.globalAlpha = 0.9; g.beginPath(); g.arc(cx, cy - r * 0.4, S * 0.08, 0, 7); g.fill(); g.globalAlpha = 1; }
+  }
+
+  function drawPenguin(p, now) {
+    if (p.gone) return;
+    const px = ox + p.dx * S + S / 2, py = oy + p.dy * S + S / 2 - p.hop * S;
+    const idle = Math.sin(now / 380 + p.i * 2), s = S * 0.42 * p.scale;
+    const sq = 1 + (p.press ? -0.08 : 0) + idle * 0.02;
+    g.save(); g.translate(px, py + S * 0.18); g.rotate(p.lean); g.scale(p.face * (1 / sq) ** 0.5, sq); g.translate(0, -S * 0.18);
+    // shadow
+    g.fillStyle = 'rgba(30,60,90,.2)'; g.beginPath(); g.ellipse(0, s * 0.95, s * 0.7, s * 0.18, 0, 0, 7); g.fill();
+    // feet
+    g.fillStyle = '#f39a2c'; g.beginPath(); g.ellipse(-s * 0.28, s * 0.88, s * 0.22, s * 0.1, 0, 0, 7); g.ellipse(s * 0.28, s * 0.88, s * 0.22, s * 0.1, 0, 0, 7); g.fill();
+    // body
+    const bg = g.createLinearGradient(-s, -s, s, s); bg.addColorStop(0, '#3a4d66'); bg.addColorStop(1, '#16202e');
+    g.fillStyle = bg; g.beginPath(); g.ellipse(0, s * 0.12, s * 0.72, s * 0.86, 0, 0, 7); g.fill();
+    // flippers (wave a little when idle)
+    const fl = idle * 0.15;
+    g.save(); g.translate(-s * 0.62, s * 0.1); g.rotate(0.35 + fl); g.beginPath(); g.ellipse(0, s * 0.2, s * 0.14, s * 0.38, 0, 0, 7); g.fill(); g.restore();
+    g.save(); g.translate(s * 0.62, s * 0.1); g.rotate(-0.35 - fl); g.beginPath(); g.ellipse(0, s * 0.2, s * 0.14, s * 0.38, 0, 0, 7); g.fill(); g.restore();
+    // belly
+    g.fillStyle = '#fbfbf7'; g.beginPath(); g.ellipse(s * 0.06, s * 0.28, s * 0.5, s * 0.62, 0, 0, 7); g.fill();
+    // face patch
+    g.beginPath(); g.ellipse(s * 0.12, -s * 0.32, s * 0.42, s * 0.3, 0, 0, 7); g.fill();
+    // eyes with blink
+    const bl = ((now / 1000 + p.blink) % 4) < 0.12 ? 0.15 : 1;
+    g.fillStyle = '#16202e'; g.beginPath(); g.ellipse(-s * 0.06, -s * 0.36, s * 0.08, s * 0.1 * bl, 0, 0, 7); g.ellipse(s * 0.32, -s * 0.36, s * 0.08, s * 0.1 * bl, 0, 0, 7); g.fill();
+    if (bl === 1) { g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.04, -s * 0.39, s * 0.03, 0, 7); g.arc(s * 0.34, -s * 0.39, s * 0.03, 0, 7); g.fill(); }
+    // cheeks
+    g.fillStyle = 'rgba(255,140,150,.45)'; g.beginPath(); g.ellipse(-s * 0.18, -s * 0.2, s * 0.08, s * 0.05, 0, 0, 7); g.ellipse(s * 0.46, -s * 0.2, s * 0.08, s * 0.05, 0, 0, 7); g.fill();
+    // beak
+    g.fillStyle = '#f39a2c'; g.beginPath(); g.moveTo(s * 0.04, -s * 0.24); g.lineTo(s * 0.26, -s * 0.24); g.lineTo(s * 0.15, -s * 0.12); g.closePath(); g.fill();
+    // scarf in the penguin's colour
+    g.fillStyle = COLORS[p.i]; rr(-s * 0.6, -s * 0.06, s * 1.2, s * 0.2, s * 0.1); g.fill();
+    g.beginPath(); g.moveTo(-s * 0.42, s * 0.08); g.lineTo(-s * 0.58, s * 0.48); g.lineTo(-s * 0.3, s * 0.42); g.closePath(); g.fill();
+    g.restore();
+  }
+
+  // little snow puffs behind sliding penguins
+  const puffs = [];
+  function frame(now) {
+    const dt = Math.min(50, now - (frame.last || now)); frame.last = now;
+    for (const a of anims) {
+      a.t += dt; const k = Math.min(1, a.t / a.dur), p = a.p;
+      if (a.bump) { const w = Math.sin(k * Math.PI) * 0.12; p.dx = p.x + a.dx * w; p.dy = p.y + a.dy * w; p.lean = a.dx * w; continue; }
+      const e = ease(k);
+      p.dx = a.fx + (a.tx - a.fx) * e; p.dy = a.fy + (a.ty - a.fy) * e; p.lean = (a.dx || 0) * 0.25 * (1 - k);
+      if (k < 0.85 && Math.random() < 0.5) puffs.push({ x: ox + p.dx * S + S / 2 - a.dx * S * 0.3, y: oy + p.dy * S + S * 0.85 - a.dy * S * 0.3, r: S * 0.06, life: 1 });
+    }
+    for (let i = anims.length - 1; i >= 0; i--) {
+      const a = anims[i];
+      if (a.t >= a.dur) {
+        const p = a.p; p.dx = p.x; p.dy = p.y; p.lean = 0; anims.splice(i, 1);
+        if (a.home) anims.push({ p, enter: true, t: 0, dur: 520 });
+      }
+      if (a.enter) { const k = Math.min(1, a.t / a.dur); a.p.hop = Math.sin(k * Math.PI) * 0.45; a.p.scale = 1 - ease(k); if (k >= 1) { a.p.gone = true; anims.splice(i, 1); burst(a.p); } }
+    }
+    if (!done && peng.every((p) => p.gone)) { done = true; setTimeout(() => { document.getElementById('winTxt').textContent = moves <= 9 ? `Perfect! ${moves} moves.` : `${moves} moves. Best is 9, can you do it?`; document.getElementById('win').classList.add('on'); }, 500); }
+
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+    drawBoard(now);
+    LEVEL.home.forEach((h, i) => drawIgloo(h[0], h[1], COLORS[i], peng[i] && peng[i].gone));
+    LEVEL.rock.forEach((r) => drawRock(r[0], r[1]));
+    for (let i = puffs.length - 1; i >= 0; i--) { const f = puffs[i]; f.life -= dt / 450; f.r += dt * 0.01; if (f.life <= 0) { puffs.splice(i, 1); continue; } g.fillStyle = `rgba(255,255,255,${f.life * 0.8})`; g.beginPath(); g.arc(f.x, f.y, f.r, 0, 7); g.fill(); }
+    [...peng].sort((a, b) => a.dy - b.dy).forEach((p) => drawPenguin(p, now));
+    for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.life -= dt / 900; if (s.life <= 0) { sparks.splice(i, 1); continue; } s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 0.0006 * dt; g.fillStyle = s.c; g.globalAlpha = s.life; g.beginPath(); g.arc(s.x, s.y, S * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; }
+    requestAnimationFrame(frame);
+  }
+  const sparks = [];
+  function burst(p) { const h = LEVEL.home[p.i]; for (let k = 0; k < 18; k++) { const a = Math.random() * 7, v = 0.08 + Math.random() * 0.12; sparks.push({ x: ox + h[0] * S + S / 2, y: oy + h[1] * S + S * 0.3, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.12, c: k % 2 ? COLORS[p.i] : '#fff', life: 1 }); } }
+
+  window.addEventListener('resize', layout);
+  layout(); reset(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
