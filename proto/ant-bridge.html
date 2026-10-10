@@ -9,20 +9,20 @@
   html, body { margin: 0; height: 100%; background: #f6e7c8; color: var(--ink);
     font: 600 16px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "Segoe UI", sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
   body { display: flex; flex-direction: column; align-items: center; touch-action: none; }
-  header { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 16px 4px; box-sizing: border-box; }
+  header { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 16px 4px; box-sizing: border-box; }
   h1 { font-size: 20px; margin: 0; }
   .sub { color: var(--soft); font-size: 13px; font-weight: 500; }
+  .sub b { color: var(--ink); }
   button { border: 0; background: #fff; color: var(--ink); font: inherit; border-radius: 14px; padding: 9px 14px; box-shadow: 0 2px 0 #d8bf92; }
   button:active { transform: translateY(2px); box-shadow: none; }
-  button:disabled { opacity: .45; }
-  #go { background: #e0603c; color: #fff; box-shadow: 0 3px 0 #a8401f; padding: 12px 30px; font-size: 18px; }
+  button.on { background: #e0603c; color: #fff; box-shadow: 0 2px 0 #a8401f; }
   canvas { display: block; touch-action: none; border-radius: 22px; }
-  .bar { display: flex; gap: 10px; align-items: center; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
-  .msg { min-height: 40px; max-width: 360px; text-align: center; color: var(--soft); font-size: 14px; font-weight: 500; padding: 4px 16px 0; }
+  .bar { display: flex; gap: 8px; align-items: center; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .msg { min-height: 40px; max-width: 380px; text-align: center; color: var(--soft); font-size: 14px; font-weight: 500; padding: 6px 16px 0; }
   .msg b { color: var(--ink); }
   .win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(59,42,28,.25); }
   .win.on { display: flex; }
-  .card { background: #fff; border-radius: 24px; padding: 24px 28px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.2); }
+  .card { background: #fff; border-radius: 24px; padding: 24px 28px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.2); max-width: 300px; }
   .card h2 { margin: 0 0 6px; font-size: 26px; }
   .card p { margin: 0 0 16px; color: var(--soft); font-weight: 500; }
   .card button { background: #e0603c; color: #fff; box-shadow: 0 3px 0 #a8401f; padding: 12px 22px; }
@@ -30,75 +30,110 @@
 </head>
 <body>
 <header>
-  <div><h1>Ant Bridge</h1><div class="sub">Level 1 · <span id="free">12</span> ants free · the strawberry needs 6 carriers</div></div>
+  <div><h1>Ant Bridge</h1><div class="sub" id="sub"></div></div>
   <button id="reset">Restart</button>
 </header>
 <canvas id="c"></canvas>
-<div class="msg" id="msg">Tap a <b>dashed spot</b> to send ants to build a bridge. Each bridge uses the ants shown on it. Tap a bridge again to take it apart.</div>
-<div class="bar"><button id="go">March! 🐜</button></div>
-<div class="win" id="win"><div class="card"><h2>Strawberry home! 🍓</h2><p id="winTxt"></p><button id="again">Play again</button></div></div>
+<div class="msg" id="msg"></div>
+<div class="bar"><button id="l1">Level 1</button><button id="l2">Level 2 · hard</button></div>
+<div class="win" id="win"><div class="card"><h2 id="winH"></h2><p id="winTxt"></p><button id="again">Play again</button></div></div>
 <script>
 (() => {
-  // ---------------------------------------------------------------- level (logical 390 × 600, side view)
-  const VW = 390, VH = 600, TOTAL = 14, NEED = 6;
-  const N = { nest: [48, 250], cliff: [112, 250], isl: [152, 250], islTop: [196, 250], islLow: [240, 372], gnd: [300, 372], food: [338, 372] };
-  const WALK = [['nest', 'cliff'], ['isl', 'islTop'], ['islTop', 'islLow'], ['gnd', 'food']];
-  const LINKS = [
-    { id: 'a', a: 'cliff', b: 'isl', cost: 2 },
-    { id: 'b', a: 'islLow', b: 'gnd', cost: 3 },
-    { id: 'c', a: 'cliff', b: 'gnd', cost: 9, ctrl: [210, 165] }, // the tempting one: a single arch over the island
+  // ================================================================ levels (logical 390 × 600, side view)
+  // nodes: named points · walk: free ground between nodes · links: spots where ants can build (cost = ants)
+  // foods: what must be carried home, and how many ants it needs.
+  const LEVELS = [
+    {
+      name: 'Level 1', total: 14,
+      intro: 'Tap a <b>dashed spot</b> to send ants to build. Then tap the <b>food</b> to send the free ants for it.',
+      nodes: { nest: [48, 250], cliff: [112, 250], isl: [152, 250], islTop: [196, 250], islLow: [240, 372], gnd: [300, 372], berry: [338, 372] },
+      walk: [['nest', 'cliff'], ['isl', 'islTop'], ['islTop', 'islLow'], ['gnd', 'berry']],
+      links: [
+        { id: 'a', a: 'cliff', b: 'isl', cost: 2 },
+        { id: 'b', a: 'islLow', b: 'gnd', cost: 3 },
+        { id: 'c', a: 'cliff', b: 'gnd', cost: 9, ctrl: [210, 165] },
+      ],
+      foods: [{ at: 'berry', need: 6, kind: 'berry' }],
+      land: [[[0, 250], [112, 250], [118, 300], [108, 600], [0, 600]], [[152, 250], [196, 250], [240, 372], [236, 600], [150, 600], [146, 300]], [[300, 372], [390, 372], [390, 600], [306, 600], [296, 420]]],
+      grass: [[0, 250, 112, 250], [152, 250, 196, 250], [196, 250, 240, 372], [300, 372, 390, 372]],
+    },
+    {
+      name: 'Level 2', total: 11,
+      intro: 'Two foods, <b>11 ants</b>. You can\'t build every bridge at once… but ants that bring food home are free again.',
+      nodes: { nest: [40, 230], cliffE: [100, 230], p1L: [150, 230], p1R: [232, 230], p2L: [300, 230], cookie: [350, 230], vF: [104, 410], vD: [232, 410], berry: [276, 410] },
+      walk: [['nest', 'cliffE'], ['p1L', 'p1R'], ['p2L', 'cookie'], ['vF', 'vD'], ['vD', 'berry']],
+      links: [
+        { id: 'a', a: 'cliffE', b: 'p1L', cost: 3 },
+        { id: 'b', a: 'p1R', b: 'p2L', cost: 3 },
+        { id: 'c', a: 'cliffE', b: 'p2L', cost: 8, ctrl: [200, 120] },
+        { id: 'd', a: 'p1R', b: 'vD', cost: 4, ladder: true },
+        { id: 'f', a: 'cliffE', b: 'vF', cost: 6, ladder: true },
+      ],
+      foods: [{ at: 'cookie', need: 4, kind: 'cookie' }, { at: 'berry', need: 5, kind: 'berry' }],
+      land: [[[0, 230], [100, 230], [100, 600], [0, 600]], [[100, 410], [300, 410], [300, 600], [100, 600]], [[300, 230], [390, 230], [390, 600], [300, 600]]],
+      float: [[150, 230, 232, 270]], // a floating island: x1, top, x2, bottom
+      grass: [[0, 230, 100, 230], [150, 230, 232, 230], [300, 230, 390, 230], [100, 410, 300, 410]],
+    },
   ];
-  // a point on a link (straight, or a curve through ctrl) at t, measured from end `from`
-  function lp(l, t, from) {
+
+  const cv = document.getElementById('c'), g = cv.getContext('2d'), VW = 390, VH = 600;
+  let k = 1, dpr = 1, L, N, ants, links, foods, phase, active, done, rebuilt;
+
+  function layout() {
+    dpr = Math.min(3, window.devicePixelRatio || 1);
+    const maxW = Math.min(window.innerWidth, 480) - 16, maxH = window.innerHeight - 200;
+    k = Math.min(maxW / VW, maxH / VH);
+    cv.style.width = VW * k + 'px'; cv.style.height = VH * k + 'px'; cv.width = VW * k * dpr; cv.height = VH * k * dpr;
+  }
+
+  function load(i) {
+    L = LEVELS[i]; N = L.nodes; level = i;
+    document.getElementById('l1').classList.toggle('on', i === 0); document.getElementById('l2').classList.toggle('on', i === 1);
+    links = L.links.map((l) => ({ ...l, ants: [], ready: false, from: null }));
+    ants = Array.from({ length: L.total }, (_, j) => ({ i: j, x: 14 + Math.random() * (N.cliff || N.cliffE)[0] * 0.75, y: N.nest[1], ang: 0, dir: Math.random() < 0.5 ? -1 : 1, state: 'home', path: null, step: 0, wait: Math.random() * 1.5, gait: Math.random() * 6 }));
+    foods = L.foods.map((f) => ({ ...f, x: N[f.at][0], y: N[f.at][1], lift: 0, wob: 0, home: false, scale: 1, crew: null }));
+    phase = 'build'; active = null; done = false; rebuilt = 0; upd(); say(L.intro);
+    document.getElementById('win').classList.remove('on');
+  }
+  let level = 0;
+  const say = (h) => { document.getElementById('msg').innerHTML = h; };
+  const free = () => ants.filter((a) => a.state === 'home').length;
+  const upd = () => {
+    const f = foods.filter((x) => !x.home).map((x) => `${x.kind === 'berry' ? '🍓' : '🍪'} needs <b>${x.need}</b>`).join(' · ');
+    document.getElementById('sub').innerHTML = `${L.name} · <b>${free()}</b> of ${L.total} ants free${f ? ' · ' + f : ''}`;
+  };
+
+  // ================================================================ geometry & paths
+  function lp(l, t, from) { // a point on a link at t, measured from end `from`
     if (from && from === l.b) t = 1 - t;
     const A = N[l.a], B = N[l.b], C = l.ctrl;
     if (!C) return [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
     const u = 1 - t; return [u * u * A[0] + 2 * u * t * C[0] + t * t * B[0], u * u * A[1] + 2 * u * t * C[1] + t * t * B[1]];
   }
-  const cv = document.getElementById('c'), g = cv.getContext('2d');
-  let k = 1, dpr = 1, ants, links, phase, berry, msgTimer = 0, done = false;
-
-  function layout() {
-    dpr = Math.min(3, window.devicePixelRatio || 1);
-    const maxW = Math.min(window.innerWidth, 480) - 16, maxH = window.innerHeight - 190;
-    k = Math.min(maxW / VW, maxH / VH);
-    cv.style.width = VW * k + 'px'; cv.style.height = VH * k + 'px'; cv.width = VW * k * dpr; cv.height = VH * k * dpr;
-  }
-
-  function reset() {
-    links = LINKS.map((l) => ({ ...l, ants: [], ready: false, from: null }));
-    ants = Array.from({ length: TOTAL }, (_, i) => ({ i, x: 20 + Math.random() * 80, y: N.nest[1], ang: 0, dir: Math.random() < 0.5 ? -1 : 1, state: 'home', path: null, step: 0, wait: Math.random() * 1.5, gait: Math.random() * 6, slot: null }));
-    berry = { x: N.food[0], y: N.food[1], lift: 0, wob: 0, home: false, scale: 1 };
-    phase = 'build'; done = false; pendingGo = false; upd();
-    say('Tap a <b>dashed spot</b> to send ants to build a bridge. Each bridge uses the ants shown on it. Tap a bridge again to take it apart.');
-    document.getElementById('win').classList.remove('on');
-  }
-  const say = (h) => { document.getElementById('msg').innerHTML = h; };
-  const free = () => ants.filter((a) => a.state === 'home').length;
-  const upd = () => { document.getElementById('free').textContent = free(); };
-
-  // ---------------------------------------------------------------- paths
+  // walkers go on top of a bridge, or on the outside of a ladder
+  const ride = (l) => (l.ladder ? [7, 0] : [0, -7]);
   function graph() {
     const adj = {}; const add = (a, b, link) => { (adj[a] = adj[a] || []).push({ to: b, link }); (adj[b] = adj[b] || []).push({ to: a, link }); };
-    WALK.forEach(([a, b]) => add(a, b, null)); links.forEach((l) => l.ready && add(l.a, l.b, l)); return adj;
+    L.walk.forEach(([a, b]) => add(a, b, null)); links.forEach((l) => l.ready && add(l.a, l.b, l)); return adj;
   }
   function route(from, to) {
     const adj = graph(), prev = { [from]: null }, q = [from];
     while (q.length) { const n = q.shift(); if (n === to) break; for (const e of adj[n] || []) if (!(e.to in prev)) { prev[e.to] = { n, link: e.link }; q.push(e.to); } }
     if (!(to in prev)) return null;
-    const nodes = []; for (let n = to; n; n = prev[n] && prev[n].n) { nodes.unshift({ n, link: prev[n] && prev[n].link }); if (!prev[n]) break; }
-    // points; walking over a bridge goes on top of the bridge ants
+    const nodes = []; for (let n = to; ; n = prev[n].n) { nodes.unshift({ n, link: prev[n] && prev[n].link }); if (!prev[n]) break; }
     const pts = [];
-    nodes.forEach((s, i) => { const p = N[s.n]; if (s.link) { for (let j = 0; j <= 10; j++) { const q = lp(s.link, j / 10, nodes[i - 1].n); pts.push([q[0], q[1] - 7]); } } pts.push([p[0], p[1]]); });
+    nodes.forEach((s, i) => { const p = N[s.n]; if (s.link) { const o = ride(s.link); for (let j = 0; j <= 10; j++) { const q = lp(s.link, j / 10, nodes[i - 1].n); pts.push([q[0] + o[0], q[1] + o[1]]); } } pts.push([p[0], p[1]]); });
     return pts;
   }
   const reach = (n) => !!route('nest', n);
 
-  // ---------------------------------------------------------------- taps
+  // ================================================================ taps
   const linkHit = (x, y) => { let best = null, bd = 24; for (const l of links) for (let j = 1; j < 20; j++) { const q = lp(l, j / 20), d = Math.hypot(q[0] - x, q[1] - y); if (d < bd) { bd = d; best = l; } } return best; };
   cv.addEventListener('pointerdown', (e) => {
-    if (phase !== 'build') return;
+    if (phase !== 'build' || done) return;
     const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / k, y = (e.clientY - r.top) / k;
+    const f = foods.find((f) => !f.home && Math.hypot(f.x - x, f.y - 14 - y) < 30);
+    if (f) return send(f);
     const l = linkHit(x, y); if (!l) return;
     if (l.ants.length) return takeApart(l);
     build(l);
@@ -106,41 +141,42 @@
 
   function build(l) {
     const from = reach(l.a) ? l.a : reach(l.b) ? l.b : null;
-    if (!from) { l.shake = 1; return say(`The ants can't get there yet. Build a bridge that <b>reaches</b> it first.`); }
+    if (!from) { l.shake = 1; return say(`The ants can't get there yet. Build something that <b>reaches</b> it first.`); }
     const home = ants.filter((a) => a.state === 'home');
-    if (home.length < l.cost) { l.shake = 1; return say(`This bridge needs <b>${l.cost}</b> ants, only ${home.length} are free.`); }
-    l.from = from; const to = from === l.a ? l.b : l.a, A = N[from], B = N[to];
+    if (home.length < l.cost) { l.shake = 1; return say(`This needs <b>${l.cost}</b> ants, only <b>${home.length}</b> are free. Tap a bridge to take it apart and free its ants.`); }
+    l.from = from; const A = N[from];
     home.sort((p, q) => Math.abs(p.x - A[0]) - Math.abs(q.x - A[0])).slice(0, l.cost).forEach((a, j) => {
-      const t = (j + 0.5) / l.cost, slot = lp(l, t, from), q1 = lp(l, Math.min(1, t + 0.02), from), q0 = lp(l, Math.max(0, t - 0.02), from); a.slotAng = Math.atan2(q1[1] - q0[1], q1[0] - q0[0]);
-      a.state = 'toLink'; a.link = l; a.slot = slot; a.path = route(nodeAt(a), from).concat([slot]); a.step = 0; a.wait = j * 0.18; l.ants.push(a);
+      const t = (j + 0.5) / l.cost, slot = lp(l, t, from), q1 = lp(l, Math.min(1, t + 0.02), from), q0 = lp(l, Math.max(0, t - 0.02), from);
+      a.slotAng = Math.atan2(q1[1] - q0[1], q1[0] - q0[0]);
+      a.state = 'toLink'; a.link = l; a.path = [[a.x, a.y], ...route('nest', from).slice(1), slot]; a.step = 0; a.wait = j * 0.15; l.ants.push(a);
     });
-    upd(); say(l.cost >= 7 ? 'A long bridge! Count the ants you have left…' : 'Building…');
+    upd(); say(l.ladder ? 'The ants hold on to each other and climb down…' : 'Building…');
   }
   function takeApart(l) {
-    l.ready = false; const back = route(l.from, 'nest') || [N.nest];
-    l.ants.forEach((a, j) => { a.state = 'goHome'; a.path = [l.from ? N[l.from] : N.nest, ...back]; a.step = 0; a.wait = j * 0.12; a.link = null; });
-    l.ants = []; say('Bridge taken apart, the ants walk home.');
+    if (!l.ready || busy()) return say('Wait a moment, the ants are still busy.');
+    l.ready = false; // the ants step off and walk home from whichever end still connects to the nest
+    const end = route(l.a, 'nest') ? l.a : route(l.b, 'nest') ? l.b : null;
+    const stranded = links.some((o) => o !== l && o.ants.length && !reach(o.a) && !reach(o.b));
+    if (!end || stranded) { l.ready = true; l.shake = 1; return say('Other ants would be <b>stranded</b>! Take apart the bridges further from the nest first.'); }
+    const back = route(end, 'nest');
+    l.ants.forEach((a, j) => { a.state = 'goHome'; a.path = [N[end], ...back.slice(1), [14 + Math.random() * 60, N.nest[1]]]; a.step = 0; a.wait = j * 0.1; a.link = null; });
+    l.ants = []; rebuilt++; say('Taken apart. Those ants are free again.');
   }
-  const nodeAt = (a) => 'nest';
-
-  let pendingGo = false;
   const busy = () => ants.some((a) => ['toLink', 'goHome', 'retreat'].includes(a.state));
-  document.getElementById('go').onclick = () => {
-    if (phase !== 'build') return;
-    if (busy()) { pendingGo = true; return say('The ants will march as soon as they finish…'); }
-    march();
-  };
-  function march() {
-    pendingGo = false;
-    const p = route('nest', 'food'); if (!p) return say('There is no way to the strawberry yet. Build bridges to <b>connect</b> the nest to it.');
-    phase = 'march'; const crew = ants.filter((a) => a.state === 'home');
-    crew.sort((p, q) => q.x - p.x).forEach((a, j) => { a.state = 'march'; a.path = [[a.x, a.y], ...p.slice(1)]; a.step = 0; a.wait = j * 0.22; a.slotX = (j - crew.length / 2) * 9; });
-    say(`${crew.length} ants march to the strawberry…`);
+  function send(f) {
+    if (busy()) return say('Wait a moment, the ants are still busy.');
+    const p = route('nest', f.at); if (!p) { f.wob = 0.6; return say(`No way to the ${f.kind === 'berry' ? 'strawberry' : 'cookie'} yet. Connect it to the nest.`); }
+    const crew = ants.filter((a) => a.state === 'home'); if (!crew.length) return;
+    phase = 'march'; active = f; f.crew = crew;
+    crew.sort((p, q) => q.x - p.x).forEach((a, j) => { a.state = 'march'; a.path = [[a.x, a.y], ...p.slice(1)]; a.step = 0; a.wait = j * 0.2; a.slotX = (j - crew.length / 2) * 8; });
+    say(`${crew.length} ants march out…`); upd();
   }
-  document.getElementById('reset').onclick = reset;
-  document.getElementById('again').onclick = reset;
+  document.getElementById('reset').onclick = () => load(level);
+  document.getElementById('again').onclick = () => load(level === 0 ? 1 : level);
+  document.getElementById('l1').onclick = () => load(0);
+  document.getElementById('l2').onclick = () => load(1);
 
-  // ---------------------------------------------------------------- update
+  // ================================================================ update
   const SPEED = 95;
   function walk(a, dt, speed = SPEED) {
     if (a.wait > 0) { a.wait -= dt; return false; }
@@ -148,131 +184,146 @@
     const dx = tgt[0] - a.x, dy = tgt[1] - a.y, d = Math.hypot(dx, dy), s = speed * dt;
     if (d < 0.5) { a.step++; return a.step >= a.path.length; }
     const m = Math.min(1, s / d); a.x += dx * m; a.y += dy * m; a.gait += s * 0.55;
-    if (Math.abs(dx) > 0.2) a.dir = Math.sign(dx);
-    const want = Math.atan2(dy, Math.abs(dx)) * a.dir; a.ang += (want - a.ang) * Math.min(1, dt * 10);
+    if (Math.abs(dx) > 0.3) a.dir = Math.sign(dx);
+    const want = Math.atan2(dy, Math.abs(dx)) * a.dir; a.ang += (want - a.ang) * Math.min(1, dt * 12);
     return false;
   }
   function update(dt) {
     for (const a of ants) {
-      if (a.state === 'home') { // pottering about the nest
+      if (a.state === 'home') {
         if (a.wait > 0) { a.wait -= dt; a.ang *= 0.9; continue; }
-        if (!a.path || a.step >= a.path.length) { a.path = [[16 + Math.random() * 88, N.nest[1]]]; a.step = 0; }
+        if (!a.path || a.step >= a.path.length) { a.path = [[12 + Math.random() * ((N.cliff || N.cliffE)[0] - 30), N.nest[1]]]; a.step = 0; }
         if (walk(a, dt, 26)) { a.wait = 0.4 + Math.random() * 1.8; a.path = null; }
       } else if (a.state === 'toLink') {
-        if (walk(a, dt)) { a.state = 'bridge'; const l = a.link; a.dir = Math.cos(a.slotAng) >= 0 ? 1 : -1; a.ang = a.dir > 0 ? a.slotAng : Math.atan2(-Math.sin(a.slotAng), -Math.cos(a.slotAng)); if (l.ants.every((q) => q.state === 'bridge')) { l.ready = true; say(free() >= NEED ? 'Bridge ready! Keep building, or press <b>March!</b>' : `Bridge ready. Only <b>${free()}</b> ants left to carry…`); } }
-      } else if (a.state === 'goHome') {
-        if (walk(a, dt)) { a.state = 'home'; a.wait = 0.3; a.ang = 0; upd(); }
+        if (walk(a, dt)) {
+          a.state = 'bridge'; const l = a.link;
+          a.dir = Math.cos(a.slotAng) >= -0.01 ? 1 : -1; a.ang = a.dir > 0 ? a.slotAng : Math.atan2(-Math.sin(a.slotAng), -Math.cos(a.slotAng));
+          if (l.ants.every((q) => q.state === 'bridge')) { l.ready = true; say(`Ready! <b>${free()}</b> ants are still free.`); }
+        }
+      } else if (a.state === 'goHome' || a.state === 'retreat') {
+        if (walk(a, dt)) { a.state = 'home'; a.wait = 0.3; a.ang = 0; a.path = null; upd(); }
       } else if (a.state === 'march') {
-        if (walk(a, dt)) { a.state = 'atFood'; a.x = N.food[0] + a.slotX; }
-      } else if (a.state === 'carry' || a.state === 'retreat') {
-        if (walk(a, dt, a.state === "carry" ? 55 : SPEED)) { a.state = a.state === 'carry' ? 'carried' : 'home'; if (a.state === 'home') { a.wait = 0.4; a.ang = 0; upd(); } }
+        if (walk(a, dt)) { a.state = 'atFood'; }
+      } else if (a.state === 'carry') {
+        if (walk(a, dt, 55)) a.state = 'carried';
       }
     }
-    if (pendingGo && phase === 'build' && !busy()) march();
     if (phase === 'march') {
-      const crew = ants.filter((a) => ['march', 'atFood'].includes(a.state));
-      if (crew.length && crew.every((a) => a.state === 'atFood')) {
-        if (crew.length >= NEED) {
-          phase = 'carry'; say('Heave-ho! 🍓');
-          const back = route('food', 'nest');
-          crew.forEach((a, j) => { a.state = 'carry'; a.path = back.map((p, i) => [p[0] + (i === 0 ? a.slotX : 0), p[1]]); a.path.push([N.nest[0] + a.slotX * 0.6, N.nest[1]]); a.step = 0; a.wait = 0.5; });
-          berry.carry = crew;
+      const f = active, crew = f.crew;
+      if (crew.every((a) => a.state === 'atFood')) {
+        if (crew.length >= f.need) {
+          phase = 'carry'; say('Heave-ho!');
+          const back = route(f.at, 'nest');
+          crew.forEach((a) => { a.state = 'carry'; a.path = [[a.x + a.slotX * 0.3, a.y], ...back.slice(1), [N.nest[0] + a.slotX * 0.6, N.nest[1]]]; a.step = 0; a.wait = 0.4; });
         } else {
-          phase = 'strain'; berry.wob = 1.6;
-          say(`Too heavy! <b>${crew.length}</b> ants can't lift it, it needs <b>${NEED}</b>. Tap a bridge to take it apart and try another way.`);
-          setTimeout(() => { const back = route('food', 'nest'); crew.forEach((a, j) => { a.state = 'retreat'; a.path = back.concat([[20 + Math.random() * 80, N.nest[1]]]); a.step = 0; a.wait = j * 0.15; }); phase = 'build'; }, 1700);
+          phase = 'strain'; f.wob = 1.6;
+          say(`Too heavy! <b>${crew.length}</b> ants can't lift it, it needs <b>${f.need}</b>.`);
+          setTimeout(() => { const back = route(f.at, 'nest'); crew.forEach((a, j) => { a.state = 'retreat'; a.path = [...back, [14 + Math.random() * 60, N.nest[1]]]; a.step = 0; a.wait = j * 0.12; }); phase = 'build'; active = null; }, 1700);
         }
       }
     }
     if (phase === 'carry') {
-      const c = berry.carry; const mx = c.reduce((s, a) => s + a.x, 0) / c.length, my = c.reduce((s, a) => s + a.y, 0) / c.length;
-      berry.lift = Math.min(1, berry.lift + dt * 2); berry.x += (mx - berry.x) * Math.min(1, dt * 8); berry.y += (my - berry.y) * Math.min(1, dt * 8);
-      if (c.every((a) => a.state === 'carried')) { phase = 'win'; berry.sink = 0; }
+      const f = active, c = f.crew;
+      const mx = c.reduce((s, a) => s + a.x, 0) / c.length, my = c.reduce((s, a) => s + a.y, 0) / c.length;
+      f.lift = Math.min(1, f.lift + dt * 2); f.x += (mx - f.x) * Math.min(1, dt * 8); f.y += (my - f.y) * Math.min(1, dt * 8);
+      if (c.every((a) => a.state === 'carried')) { phase = 'stow'; f.sink = 0; }
     }
-    if (phase === 'win') { berry.sink += dt; berry.scale = Math.max(0, 1 - berry.sink * 1.2); if (berry.sink > 0.9 && !done) { done = true; burst(N.nest[0], N.nest[1] - 20); c_win(); } }
-    if (berry.wob > 0) berry.wob -= dt;
+    if (phase === 'stow') {
+      const f = active; f.sink += dt; f.scale = Math.max(0, 1 - f.sink * 1.4);
+      if (f.sink > 0.8) {
+        f.home = true; burst(N.nest[0], N.nest[1] - 18);
+        f.crew.forEach((a) => { a.state = 'home'; a.path = null; a.wait = Math.random() * 0.6; });
+        phase = 'build'; active = null; upd();
+        if (foods.every((x) => x.home)) win(); else say('Home! Those ants are <b>free again</b>. What about the other food?');
+      }
+    }
+    foods.forEach((f) => { if (f.wob > 0) f.wob -= dt; });
     links.forEach((l) => { if (l.shake) l.shake = Math.max(0, l.shake - dt * 2.5); });
   }
-  function c_win() {
-    const used = links.filter((l) => l.ready).reduce((s, l) => s + l.cost, 0);
-    setTimeout(() => { document.getElementById('winTxt').textContent = `Bridges used ${used} ants, ${TOTAL - used} carried it home.`; document.getElementById('win').classList.add('on'); }, 700);
-    ants.forEach((a) => { if (a.state === 'carried') { a.state = 'home'; a.path = null; a.wait = Math.random(); } });
+  function win() {
+    done = true;
+    document.getElementById('winH').textContent = level === 0 ? 'Strawberry home! 🍓' : 'Pantry full! 🍓🍪';
+    document.getElementById('winTxt').textContent = level === 0 ? 'Short bridges leave more ants to carry.' : rebuilt ? `You took ${rebuilt} bridge${rebuilt > 1 ? 's' : ''} apart and rebuilt. That's the trick!` : 'Nice planning!';
+    setTimeout(() => document.getElementById('win').classList.add('on'), 700);
   }
 
-  // ---------------------------------------------------------------- drawing
+  // ================================================================ drawing
   function drawBg(now) {
     const sky = g.createLinearGradient(0, 0, 0, VH); sky.addColorStop(0, '#bfe3f3'); sky.addColorStop(0.55, '#f8e9c9'); sky.addColorStop(1, '#f1d6a4');
     g.fillStyle = sky; g.fillRect(0, 0, VW, VH);
-    // sun + hills
-    g.fillStyle = 'rgba(255,240,180,.8)'; g.beginPath(); g.arc(310, 90, 34, 0, 7); g.fill();
-    g.fillStyle = '#c9dfae'; g.beginPath(); g.moveTo(0, 200); for (let x = 0; x <= VW; x += 10) g.lineTo(x, 175 + Math.sin(x / 55) * 18); g.lineTo(VW, VH); g.lineTo(0, VH); g.fill();
-    // drifting clouds
-    g.fillStyle = 'rgba(255,255,255,.85)'; [[60, 70, 1], [230, 50, 0.8]].forEach(([x, y, s], i) => { const cx = ((x + now * 0.006 * (i + 1)) % (VW + 120)) - 60; g.beginPath(); g.arc(cx, y, 16 * s, 0, 7); g.arc(cx + 18 * s, y - 8 * s, 20 * s, 0, 7); g.arc(cx + 40 * s, y, 15 * s, 0, 7); g.fill(); });
-    // the chasm
-    const ch = g.createLinearGradient(0, 260, 0, VH); ch.addColorStop(0, 'rgba(90,60,40,0)'); ch.addColorStop(1, 'rgba(60,38,24,.55)'); g.fillStyle = ch; g.fillRect(0, 260, VW, VH);
+    g.fillStyle = 'rgba(255,240,180,.8)'; g.beginPath(); g.arc(310, 80, 30, 0, 7); g.fill();
+    g.fillStyle = '#c9dfae'; g.beginPath(); g.moveTo(0, 190); for (let x = 0; x <= VW; x += 10) g.lineTo(x, 165 + Math.sin(x / 55) * 18); g.lineTo(VW, VH); g.lineTo(0, VH); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.85)'; [[60, 60, 1], [230, 40, 0.8]].forEach(([x, y, s], i) => { const cx = ((x + now * 0.006 * (i + 1)) % (VW + 120)) - 60; g.beginPath(); g.arc(cx, y, 16 * s, 0, 7); g.arc(cx + 18 * s, y - 8 * s, 20 * s, 0, 7); g.arc(cx + 40 * s, y, 15 * s, 0, 7); g.fill(); });
+    const ch = g.createLinearGradient(0, 240, 0, VH); ch.addColorStop(0, 'rgba(90,60,40,0)'); ch.addColorStop(1, 'rgba(60,38,24,.55)'); g.fillStyle = ch; g.fillRect(0, 240, VW, VH);
   }
-  function dirt(poly) {
-    const gr = g.createLinearGradient(0, 240, 0, VH); gr.addColorStop(0, '#b07a4c'); gr.addColorStop(1, '#6e4528');
-    g.fillStyle = gr; g.beginPath(); poly.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill();
-    // pebbles
-    g.save(); g.clip(); g.fillStyle = 'rgba(255,230,190,.18)';
-    for (let i = 0; i < 40; i++) { const x = (i * 73) % VW, y = 270 + ((i * 137) % 320); g.beginPath(); g.ellipse(x, y, 4 + (i % 3) * 2, 3, 0, 0, 7); g.fill(); }
-    g.restore();
-  }
+  function dirtFill() { const gr = g.createLinearGradient(0, 220, 0, VH); gr.addColorStop(0, '#b07a4c'); gr.addColorStop(1, '#6e4528'); return gr; }
+  function pebbles() { g.save(); g.clip(); g.fillStyle = 'rgba(255,230,190,.18)'; for (let i = 0; i < 46; i++) { const x = (i * 73) % VW, y = 240 + ((i * 137) % 360); g.beginPath(); g.ellipse(x, y, 4 + (i % 3) * 2, 3, 0, 0, 7); g.fill(); } g.restore(); }
   function grass(x1, y1, x2, y2) {
     g.strokeStyle = '#6aa84f'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(x1, y1 + 2); g.lineTo(x2, y2 + 2); g.stroke();
     g.strokeStyle = '#86c06a'; g.lineWidth = 2;
-    const L = Math.hypot(x2 - x1, y2 - y1); for (let d = 4; d < L; d += 7) { const t = d / L, x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(d) * 2, y - 5 - (d % 3)); g.stroke(); }
+    const len = Math.hypot(x2 - x1, y2 - y1); for (let d = 4; d < len; d += 7) { const t = d / len, x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(d) * 2, y - 5 - (d % 3)); g.stroke(); }
   }
   function drawTerrain() {
-    dirt([[0, 250], [112, 250], [118, 300], [108, 600], [0, 600]]);
-    dirt([[152, 250], [196, 250], [240, 372], [236, 600], [150, 600], [146, 300]]);
-    dirt([[300, 372], [390, 372], [390, 600], [306, 600], [296, 420]]);
-    grass(0, 250, 112, 250); grass(152, 250, 196, 250); grass(196, 250, 240, 372); grass(300, 372, 390, 372);
-    // nest mound
-    g.fillStyle = '#9a6a42'; g.beginPath(); g.ellipse(N.nest[0], N.nest[1] + 2, 30, 16, 0, Math.PI, 0); g.fill();
+    for (const poly of L.land) { g.fillStyle = dirtFill(); g.beginPath(); poly.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); pebbles(); }
+    for (const [x1, top, x2, bot] of L.float || []) { // floating island with dangling roots
+      g.fillStyle = dirtFill(); g.beginPath(); g.moveTo(x1, top); g.lineTo(x2, top); g.quadraticCurveTo(x2, bot, (x1 + x2) / 2, bot + 18); g.quadraticCurveTo(x1, bot, x1, top); g.fill();
+      g.strokeStyle = '#7a5232'; g.lineWidth = 1.5; for (let x = x1 + 14; x < x2 - 10; x += 16) { g.beginPath(); g.moveTo(x, bot); g.quadraticCurveTo(x + 4, bot + 16, x - 2, bot + 26); g.stroke(); }
+    }
+    L.grass.forEach((s) => grass(...s));
+    g.fillStyle = '#9a6a42'; g.beginPath(); g.ellipse(N.nest[0], N.nest[1] + 2, 28, 15, 0, Math.PI, 0); g.fill();
     g.fillStyle = '#3a2416'; g.beginPath(); g.ellipse(N.nest[0], N.nest[1] - 2, 9, 6, 0, Math.PI, 0); g.fill();
+    // stored food peeking out of the nest
+    foods.filter((f) => f.home).forEach((f, i) => { g.font = '14px sans-serif'; g.textAlign = 'center'; g.fillText(f.kind === 'berry' ? '🍓' : '🍪', N.nest[0] - 8 + i * 16, N.nest[1] - 16); });
   }
+  function linkPath(l, off) { g.beginPath(); for (let j = 0; j <= 24; j++) { const q = lp(l, j / 24); j ? g.lineTo(q[0] + off[0], q[1] + off[1]) : g.moveTo(q[0] + off[0], q[1] + off[1]); } }
   function drawSpots(now) {
     for (const l of links) {
       if (l.ants.length) continue;
-      const A = N[l.a], B = N[l.b], sh = Math.sin((l.shake || 0) * 30) * 4 * (l.shake || 0);
+      const sh = Math.sin((l.shake || 0) * 30) * 4 * (l.shake || 0);
       g.save(); g.translate(sh, 0);
       g.setLineDash([6, 6]); g.lineDashOffset = -now * 0.02; g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = 4; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(A[0], A[1] - 4); if (l.ctrl) g.quadraticCurveTo(l.ctrl[0], l.ctrl[1] - 4, B[0], B[1] - 4); else g.lineTo(B[0], B[1] - 4); g.stroke(); g.setLineDash([]);
-      const M = lp(l, 0.5), mx = M[0], my = M[1] - 22, pulse = 1 + Math.sin(now / 300) * 0.05;
+      linkPath(l, l.ladder ? [4, 0] : [0, -4]); g.stroke(); g.setLineDash([]);
+      const M = lp(l, 0.5), mx = M[0] + (l.ladder ? 26 : 0), my = M[1] - (l.ladder ? 0 : 22), pulse = 1 + Math.sin(now / 300 + l.cost) * 0.05;
       g.translate(mx, my); g.scale(pulse, pulse);
       g.fillStyle = '#fff'; g.beginPath(); g.roundRect(-20, -12, 40, 24, 12); g.fill();
       g.fillStyle = '#3b2a1c'; g.font = '700 14px -apple-system, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🐜' + l.cost, 0, 1);
       g.restore();
     }
   }
-  function drawBerry(now) {
-    if (berry.scale <= 0) return;
-    const wob = berry.wob > 0 ? Math.sin(now / 40) * 0.08 : 0, lift = berry.lift * 12;
-    g.save(); g.translate(berry.x, berry.y - 15 - lift); g.rotate(wob); g.scale(berry.scale, berry.scale);
-    g.fillStyle = 'rgba(60,30,20,.2)'; if (!berry.lift) { g.beginPath(); g.ellipse(0, 15, 18, 4, 0, 0, 7); g.fill(); }
-    const gr = g.createRadialGradient(-6, -6, 2, 0, 0, 22); gr.addColorStop(0, '#ff7a7a'); gr.addColorStop(1, '#d42b3a');
-    g.fillStyle = gr; g.beginPath(); g.moveTo(0, 16); g.bezierCurveTo(-24, 6, -22, -16, 0, -14); g.bezierCurveTo(22, -16, 24, 6, 0, 16); g.fill();
-    g.fillStyle = '#ffe58a'; for (let i = 0; i < 12; i++) { const a = i * 2.4, r = 4 + (i % 4) * 3; g.beginPath(); g.ellipse(Math.cos(a) * r, Math.sin(a) * r * 0.8 - 1, 1.2, 1.8, a, 0, 7); g.fill(); }
-    g.fillStyle = '#4f9a3a'; for (let i = -2; i <= 2; i++) { g.beginPath(); g.ellipse(i * 5, -15, 3, 7, i * 0.5, 0, 7); g.fill(); }
+  function drawFood(f, now) {
+    if (f.home || f.scale <= 0) return;
+    const wob = f.wob > 0 ? Math.sin(now / 40) * 0.08 : 0, lift = f.lift * 12;
+    g.save(); g.translate(f.x, f.y - 15 - lift); g.rotate(wob); g.scale(f.scale, f.scale);
+    if (!f.lift) { g.fillStyle = 'rgba(60,30,20,.2)'; g.beginPath(); g.ellipse(0, 15, 18, 4, 0, 0, 7); g.fill(); }
+    if (f.kind === 'berry') {
+      const gr = g.createRadialGradient(-6, -6, 2, 0, 0, 22); gr.addColorStop(0, '#ff7a7a'); gr.addColorStop(1, '#d42b3a');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(0, 16); g.bezierCurveTo(-24, 6, -22, -16, 0, -14); g.bezierCurveTo(22, -16, 24, 6, 0, 16); g.fill();
+      g.fillStyle = '#ffe58a'; for (let i = 0; i < 12; i++) { const a = i * 2.4, r = 4 + (i % 4) * 3; g.beginPath(); g.ellipse(Math.cos(a) * r, Math.sin(a) * r * 0.8 - 1, 1.2, 1.8, a, 0, 7); g.fill(); }
+      g.fillStyle = '#4f9a3a'; for (let i = -2; i <= 2; i++) { g.beginPath(); g.ellipse(i * 5, -15, 3, 7, i * 0.5, 0, 7); g.fill(); }
+    } else {
+      const gr = g.createRadialGradient(-5, -6, 2, 0, 0, 20); gr.addColorStop(0, '#f2c27a'); gr.addColorStop(1, '#c98a3e');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(0, 2, 19, 13, 0, 0, 7); g.fill();
+      g.fillStyle = '#5a3418'; [[-8, -2], [4, -5], [9, 4], [-3, 6], [-11, 6], [12, -3]].forEach(([x, y]) => { g.beginPath(); g.ellipse(x, y, 2.6, 2, 0.4, 0, 7); g.fill(); });
+    }
+    // how many ants it needs, until it's on its way
+    if (!f.lift) { g.fillStyle = '#fff'; g.beginPath(); g.roundRect(-17, -38, 34, 20, 10); g.fill(); g.fillStyle = '#3b2a1c'; g.font = '700 12px -apple-system, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🐜' + f.need, 0, -27); }
     g.restore();
   }
   // a side-view ant: abdomen, thorax, head, 6 legs in a tripod gait, antennae, a shiny eye
   function drawAnt(a, now) {
-    const bridge = a.state === 'bridge', s = 1;
-    g.save(); g.translate(a.x, a.y - (bridge ? 3 : 5)); g.rotate(a.ang); g.scale(a.dir * s, s);
-    const ph = a.gait, lift = (o) => (bridge ? 0 : Math.max(0, Math.sin(ph + o)) * 2.2), swing = (o) => (bridge ? 0 : Math.cos(ph + o) * 2.5);
+    const still = a.state === 'bridge', s = 1.15;
+    g.save(); g.translate(a.x, a.y - (still ? 3 : 5)); g.rotate(a.ang); g.scale(a.dir * s, s);
+    const ph = a.gait, lift = (o) => (still ? 0 : Math.max(0, Math.sin(ph + o)) * 2.2), swing = (o) => (still ? Math.sin(now / 500 + a.i) * 0.4 : Math.cos(ph + o) * 2.5);
     g.strokeStyle = '#2b1a12'; g.lineWidth = 1.3; g.lineCap = 'round';
-    [[-4, 0], [0, Math.PI], [4, 0]].forEach(([bx, o], i) => { // far legs then near legs, alternating tripods
+    [[-4, 0], [0, Math.PI], [4, 0]].forEach(([bx, o]) => {
       [o, o + Math.PI].forEach((oo, side) => { g.globalAlpha = side ? 1 : 0.6; g.beginPath(); g.moveTo(bx * 0.6, 1); g.lineTo(bx + swing(oo) - 1, 3 - lift(oo)); g.lineTo(bx * 1.3 + swing(oo), 5.5 - lift(oo)); g.stroke(); });
     });
     g.globalAlpha = 1;
     const body = g.createLinearGradient(0, -5, 0, 3); body.addColorStop(0, '#8a4a2e'); body.addColorStop(1, '#4a2416');
     g.fillStyle = body;
-    g.beginPath(); g.ellipse(-6.5, -1, 5.2, 3.8, -0.15, 0, 7); g.fill();  // abdomen
-    g.beginPath(); g.ellipse(-0.5, -0.5, 2.6, 1.9, 0, 0, 7); g.fill();     // thorax
-    g.beginPath(); g.ellipse(4.6, -1.6, 3.2, 2.9, 0.2, 0, 7); g.fill();    // head
+    g.beginPath(); g.ellipse(-6.5, -1, 5.2, 3.8, -0.15, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(-0.5, -0.5, 2.6, 1.9, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(4.6, -1.6, 3.2, 2.9, 0.2, 0, 7); g.fill();
     g.fillStyle = 'rgba(255,220,190,.55)'; g.beginPath(); g.ellipse(-7.5, -3, 2, 0.9, -0.2, 0, 7); g.fill();
     g.fillStyle = '#fff'; g.beginPath(); g.arc(5.6, -2.4, 1.15, 0, 7); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(5.9, -2.3, 0.7, 0, 7); g.fill();
     const tw = Math.sin(now / 160 + a.i) * 0.6;
@@ -288,16 +339,16 @@
     update(dt);
     g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
     drawBg(now); drawTerrain(); drawSpots(now);
-    for (const l of links) if (l.ready) { g.strokeStyle = '#4a2416'; g.lineWidth = 3; g.beginPath(); for (let j = 0; j <= 20; j++) { const q = lp(l, j / 20); j ? g.lineTo(q[0], q[1] - 2) : g.moveTo(q[0], q[1] - 2); } g.stroke(); }
+    for (const l of links) if (l.ready) { g.strokeStyle = '#4a2416'; g.lineWidth = 3; linkPath(l, l.ladder ? [2, 0] : [0, -2]); g.stroke(); }
     ants.filter((a) => a.state === 'bridge').forEach((a) => drawAnt(a, now));
-    if (!berry.lift) drawBerry(now);
+    foods.filter((f) => !f.lift).forEach((f) => drawFood(f, now));
     ants.filter((a) => a.state !== 'bridge').sort((p, q) => p.y - q.y).forEach((a) => drawAnt(a, now));
-    if (berry.lift) drawBerry(now);
+    foods.filter((f) => f.lift).forEach((f) => drawFood(f, now));
     for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.life -= dt; if (s.life <= 0) { sparks.splice(i, 1); continue; } s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 160 * dt; g.globalAlpha = s.life; g.fillStyle = s.c; g.beginPath(); g.arc(s.x, s.y, 2.5, 0, 7); g.fill(); g.globalAlpha = 1; }
     requestAnimationFrame(frame);
   }
   window.addEventListener('resize', layout);
-  layout(); reset(); requestAnimationFrame(frame);
+  layout(); load(/hard|2/.test(location.hash) ? 1 : 0); requestAnimationFrame(frame);
 })();
 </script>
 </body>
