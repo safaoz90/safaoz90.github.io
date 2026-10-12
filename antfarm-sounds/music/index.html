@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ant Farm level music</title><meta name="robots" content="noindex">
+<style>
+:root{--bg:#eaf6ff;--card:#fff;--ink:#14407f;--muted:#5a6f8f;--accent:#2b8be8;--accent-dark:#164b9c;--on:#3fcf4a;--on-dark:#239a2c;--line:#cfe4f7;--track:#d8e9f8;--pick:#fff4c9;--pick-line:#ffc83d}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1f3a;--card:#16294a;--ink:#e6f0ff;--muted:#9db3d6;--line:#26406a;--track:#22395f;--pick:#3a3317;--pick-line:#e0a92a}}
+*{box-sizing:border-box}body{margin:0;padding:16px 16px 130px;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,system-ui,sans-serif}
+h1{margin:4px 0 6px;font-size:24px;text-wrap:balance}h2{font-size:17px;margin:24px 0 4px}h2+p{margin-bottom:4px}p{color:var(--muted);margin:0 0 8px}
+.item{padding:10px 12px;margin:8px 0;background:var(--card);border:2px solid var(--line);border-radius:16px;transition:background .15s,border-color .15s}
+.item.picked{background:var(--pick);border-color:var(--pick-line)}
+.row{display:flex;align-items:center;gap:12px}
+.play{width:52px;height:52px;flex:none;border:0;border-radius:26px;background:var(--accent);color:#fff;font-size:19px;box-shadow:0 3px 0 var(--accent-dark)}
+.play.on{background:var(--on);box-shadow:0 3px 0 var(--on-dark)}
+.name{flex:1;min-width:0}.name b{display:block}.name small{color:var(--muted);font-size:14px;display:block}
+.len{flex:none;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:3px;background:var(--track);margin:8px 0 2px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--accent)}
+.choose{display:block;margin-top:8px}.choose input{display:none}
+.choose span{display:block;text-align:center;padding:9px;border-radius:12px;border:1px solid var(--line);color:var(--muted);font-weight:700;font-size:15px}
+.choose input:checked+span{background:var(--on);border-color:var(--on);color:#fff}
+.note{width:100%;margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:15px -apple-system,system-ui,sans-serif}
+.foot{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.foot span{flex:1;min-width:0;font-size:14px;color:var(--muted)}.foot button{height:48px;padding:0 18px;border:0;border-radius:14px;background:var(--on);color:#fff;font-weight:700;font-size:16px;box-shadow:0 3px 0 var(--on-dark)}
+</style></head><body>
+<h1>Ant Farm: music for the levels</h1>
+<p>One tune for every level, and no music on Home, the Journey or the Shop. Tap ▶ to listen (on a phone, turn the silent switch off first), tap <b>Pick this one</b> on your favourite, then <b>Copy my choice</b> and paste it to Claude.</p>
+<p>All free to use (CC0). They play here at the same loudness so you can compare them; in the game the music sits quieter, under the sounds. Each one loops.</p>
+
+<h2>Calm</h2>
+<p>Slow and soft, for thinking.</p>
+<div id="calm"></div>
+<h2>Bouncy</h2>
+<p>More cheerful, with a beat.</p>
+<div id="bouncy"></div>
+<h2>None of these?</h2>
+<div class="item" data-id="none" data-name="None of these">
+  <label class="choose"><input type="radio" name="pick" value="none"><span>None of these, find others</span></label>
+  <input class="note" placeholder="What should it sound like? (optional)">
+</div>
+
+<div class="foot"><span class="sum">Nothing picked yet</span><button class="copy">Copy my choice</button></div>
+<script>
+const CALM = [
+  ["morning-sky", "Morning Sky", "WindheartDev: a calm, chill theme for a relaxing morning. The quietest of all.", "2:12"],
+  ["pretty", "Pretty", "Alex McCulloch: sparse and soft, with quiet stretches.", "1:54"],
+  ["in-the-lobby", "In the Lobby", "Lo-fi and very soothing, made to loop.", "1:45"],
+  ["good-morning", "Good Morning", "Cakeflaps: a cute little song to wake up to; slow and warm.", "2:01"],
+  ["happy", "Happy", "Alex McCulloch: light and steady.", "1:44"],
+  ["chilly-bells", "Chilly Bells", "Alex McCulloch: bells, unhurried.", "2:12"],
+];
+const BOUNCY = [
+  ["gone-fishin", "Gone Fishin'", "Memoraphile: cheerful and steady, from a little fishing game.", "1:48"],
+  ["sunflower", "Champ de tournesol (Sunflower Field)", "Komiku: shares its name with the game's Sunflower Field chapter.", "1:58"],
+  ["happy-vibes", "Happy Vibes", "Ruskerdax: cute and light, made for a puzzle game; an island feel. The shortest loop.", "0:45"],
+  ["four-loop", "Four Loop", "pauliuw: made for puzzle games.", "1:37"],
+  ["up-in-the-sky", "Up in the Sky", "Memoraphile: dreamy, picks up about 30 seconds in. The longest, so it repeats least.", "3:18"],
+];
+const audio = new Audio(); audio.loop = true; let cur = null;
+function build(list, where) {
+  const box = document.getElementById(where);
+  for (const [id, name, what, len] of list) {
+    const d = document.createElement("div"); d.className = "item"; d.dataset.id = id; d.dataset.name = name;
+    d.innerHTML = `<div class="row"><button class="play" aria-label="Play ${name}">▶</button><div class="name"><b>${name}</b><small>${what}</small></div><span class="len">${len}</span></div>
+      <div class="bar"><i></i></div>
+      <label class="choose"><input type="radio" name="pick" value="${id}"><span>Pick this one</span></label>`;
+    d.querySelector(".play").addEventListener("click", () => play(d));
+    box.appendChild(d);
+  }
+}
+function play(d) {
+  const b = d.querySelector(".play");
+  if (cur === d && !audio.paused) { audio.pause(); b.classList.remove("on"); b.textContent = "▶"; return; }
+  if (cur) { const pb = cur.querySelector(".play"); pb.classList.remove("on"); pb.textContent = "▶"; }
+  if (cur !== d) { audio.src = d.dataset.id + ".m4a"; audio.currentTime = 0; }
+  audio.play().catch(() => {}); cur = d; b.classList.add("on"); b.textContent = "❚❚";
+}
+audio.addEventListener("timeupdate", () => { const bar = cur && cur.querySelector(".bar i"); if (bar && audio.duration) bar.style.width = (100 * audio.currentTime / audio.duration) + "%"; });
+function choice() {
+  const v = document.querySelector('input[name="pick"]:checked'); if (!v) return null;
+  const d = v.closest(".item"), n = d.querySelector(".note");
+  return { name: d.dataset.name, note: n ? n.value.trim() : "" };
+}
+function sum() {
+  document.querySelectorAll(".item").forEach(d => d.classList.toggle("picked", !!d.querySelector('input[name="pick"]:checked')));
+  const c = choice(); document.querySelector(".sum").textContent = c ? "Picked: " + c.name : "Nothing picked yet";
+}
+document.querySelector(".copy").addEventListener("click", async () => {
+  const c = choice(); if (!c) { document.querySelector(".sum").textContent = "Pick one first"; return; }
+  const text = "Ant Farm level music: " + c.name + (c.note ? " (" + c.note + ")" : "");
+  try { await navigator.clipboard.writeText(text); document.querySelector(".sum").textContent = "Copied!"; }
+  catch { prompt("Copy this:", text); }
+});
+build(CALM, "calm"); build(BOUNCY, "bouncy");
+document.querySelectorAll('input[name="pick"]').forEach(i => i.addEventListener("change", sum));
+</script></body></html>
