@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ant Farm music and sounds</title><meta name="robots" content="noindex">
+<style>
+:root{--bg:#eaf6ff;--card:#fff;--ink:#14407f;--muted:#5a6f8f;--accent:#2b8be8;--on:#3fcf4a;--warn:#ff9a1f;--line:#cfe4f7;--track:#d8e9f8}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1f3a;--card:#16294a;--ink:#e6f0ff;--muted:#9db3d6;--line:#26406a;--track:#22395f}}
+*{box-sizing:border-box}body{margin:0;padding:16px 16px 130px;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,system-ui,sans-serif}
+h1{margin:4px 0 6px;font-size:24px}h2{font-size:17px;margin:24px 0 8px}p{color:var(--muted);margin:0 0 8px}
+.item{padding:10px 12px;margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:16px}
+.row{display:flex;align-items:center;gap:12px}
+.play{width:52px;height:52px;flex:none;border:0;border-radius:26px;background:var(--accent);color:#fff;font-size:19px;box-shadow:0 3px 0 #164b9c}
+.play.on{background:var(--on);box-shadow:0 3px 0 #239a2c}
+.name{flex:1;min-width:0}.name b{display:block}.name small{color:var(--muted);font-size:14px}
+.bar{height:6px;border-radius:3px;background:var(--track);margin:8px 0 2px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--accent)}
+.vote{display:flex;gap:8px;margin-top:8px}.vote label{flex:1}.vote input{display:none}
+.vote span{display:block;text-align:center;padding:8px;border-radius:12px;border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:15px}
+.vote input:checked+span.k{background:var(--on);border-color:var(--on);color:#fff}.vote input:checked+span.c{background:var(--warn);border-color:var(--warn);color:#fff}
+.note{display:none;width:100%;margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:15px -apple-system,system-ui,sans-serif}
+.item.change .note{display:block}
+.foot{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.foot span{flex:1;font-size:14px;color:var(--muted)}.foot button{height:48px;padding:0 18px;border:0;border-radius:14px;background:var(--on);color:#fff;font-weight:700;font-size:16px}
+</style></head><body>
+<h1>Ant Farm: music and sounds</h1>
+<p>Everything new in the game, as it plays there. Tap ▶ to listen (on a phone, turn the silent switch off first). Mark each one <b>Keep</b> or <b>Change</b>, add a note if you like, then tap <b>Copy my notes</b> and paste it to Claude.</p>
+<p>Free to use: music by MintoDog (CC0), coins by Kenney (CC0); the chamber notes, chime and booster sound were made for the game.</p>
+
+<h2>Music</h2>
+<div id="music"></div>
+<h2>Sounds</h2>
+<div id="sounds"></div>
+
+<div class="foot"><span class="sum">Nothing marked yet</span><button class="copy">Copy my notes</button></div>
+<script>
+const MUSIC = [
+  ["home", "Home, Journey and Shop", "Cozy Puzzle Title, 1 min loop"],
+  ["game1", "In a level (1st of 3, turns each level)", "Cozy Puzzle In-Game 2, 90 bpm, 2 min loop"],
+  ["game2", "In a level (2nd of 3)", "Cozy Puzzle In-Game 3, 108 bpm, 2 min loop"],
+  ["game3", "In a level (3rd of 3)", "Cozy Puzzle In-Game 1, 118 bpm, 2 min loop"],
+];
+const SOUNDS = [
+  ["win", "Level won", "Cozy Puzzle Clear jingle; the music goes quiet for it"],
+  ["chamber", "A chamber filling", "each fruit: the snap and a note a step higher (do, mi, sol), then the chime"],
+  ["chime", "A chamber full (the chime alone)", "bells: a quick rising ta-da with a sparkle"],
+  ["coins", "Coins landing", "a handful of coins, then a little ting per coin"],
+  ["magic", "A booster firing", "glassy bells running up over a rising whoosh"],
+];
+const audio = new Audio(); let cur = null;
+function build(list, where, kind) {
+  const box = document.getElementById(where);
+  for (const [id, name, what] of list) {
+    const d = document.createElement("div"); d.className = "item"; d.dataset.id = id; d.dataset.name = name;
+    d.innerHTML = `<div class="row"><button class="play" aria-label="Play ${name}">▶</button><div class="name"><b>${name}</b><small>${what}</small></div></div>
+      ${kind === "music" ? '<div class="bar"><i></i></div>' : ""}
+      <div class="vote"><label><input type="radio" name="v-${id}" value="keep"><span class="k">Keep</span></label><label><input type="radio" name="v-${id}" value="change"><span class="c">Change</span></label></div>
+      <input class="note" placeholder="What should be different? (optional)">`;
+    d.querySelector(".play").addEventListener("click", () => play(d));
+    d.querySelectorAll(".vote input").forEach(i => i.addEventListener("change", () => { d.classList.toggle("change", i.value === "change" && i.checked); sum(); }));
+    d.querySelector(".note").addEventListener("input", sum);
+    box.appendChild(d);
+  }
+}
+function play(d) {
+  const b = d.querySelector(".play");
+  if (cur === d && !audio.paused) { audio.pause(); b.classList.remove("on"); b.textContent = "▶"; return; }
+  if (cur) { const pb = cur.querySelector(".play"); pb.classList.remove("on"); pb.textContent = "▶"; }
+  if (cur !== d) { audio.src = d.dataset.id + ".m4a"; audio.currentTime = 0; }
+  audio.loop = d.dataset.id === "home" || d.dataset.id.startsWith("game");
+  audio.play().catch(() => {}); cur = d; b.classList.add("on"); b.textContent = "❚❚";
+}
+audio.addEventListener("timeupdate", () => { const bar = cur && cur.querySelector(".bar i"); if (bar && audio.duration) bar.style.width = (100 * audio.currentTime / audio.duration) + "%"; });
+audio.addEventListener("ended", () => { if (cur) { const b = cur.querySelector(".play"); b.classList.remove("on"); b.textContent = "▶"; } });
+function notes() {
+  const lines = [];
+  document.querySelectorAll(".item").forEach(d => {
+    const v = d.querySelector(".vote input:checked"); if (!v) return;
+    const n = d.querySelector(".note").value.trim();
+    lines.push(`${d.dataset.name}: ${v.value === "keep" ? "keep" : "change"}${v.value === "change" && n ? " (" + n + ")" : ""}`);
+  });
+  return lines;
+}
+function sum() { const n = notes(); document.querySelector(".sum").textContent = n.length ? `${n.length} of ${document.querySelectorAll(".item").length} marked` : "Nothing marked yet"; }
+document.querySelector(".copy").addEventListener("click", async () => {
+  const n = notes(); if (!n.length) { alert("Mark at least one first"); return; }
+  const text = "Ant Farm sounds:\n" + n.join("\n");
+  try { await navigator.clipboard.writeText(text); document.querySelector(".sum").textContent = "Copied!"; }
+  catch { prompt("Copy this:", text); }
+});
+build(MUSIC, "music", "music"); build(SOUNDS, "sounds", "sound");
+</script></body></html>
