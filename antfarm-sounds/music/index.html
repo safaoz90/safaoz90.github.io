@@ -22,13 +22,16 @@ h1{margin:4px 0 6px;font-size:24px;text-wrap:balance}h2{font-size:17px;margin:24
 </style></head><body>
 <h1>Ant Farm: music for the levels</h1>
 <p>One tune for every level, and no music on Home, the Journey or the Shop. Tap ▶ to listen (on a phone, turn the silent switch off first), tap <b>Pick this one</b> on your favourite, then <b>Copy my choice</b> and paste it to Claude.</p>
-<p>All free to use (CC0). They play here at the same loudness so you can compare them; in the game the music sits quieter, under the sounds. Each one loops.</p>
+<p>They play here at the same loudness so you can compare them; in the game the music sits quieter, under the sounds. Each one loops.</p>
 
+<h2>Made for Ant Farm</h2>
+<p>Our own two, written note by note and played by little synth instruments: no other game has them.</p>
+<div id="ours"></div>
 <h2>Calm</h2>
-<p>Slow and soft, for thinking.</p>
+<p>Free to use (CC0), from OpenGameArt. Slow and soft, for thinking.</p>
 <div id="calm"></div>
 <h2>Bouncy</h2>
-<p>More cheerful, with a beat.</p>
+<p>Free to use (CC0), from OpenGameArt. More cheerful, with a beat.</p>
 <div id="bouncy"></div>
 <h2>None of these?</h2>
 <div class="item" data-id="none" data-name="None of these">
@@ -38,6 +41,10 @@ h1{margin:4px 0 6px;font-size:24px;text-wrap:balance}h2{font-size:17px;margin:24
 
 <div class="foot"><span class="sum">Nothing picked yet</span><button class="copy">Copy my choice</button></div>
 <script>
+const OURS = [
+  ["ours-calm", "Under the Leaves (calm)", "A music box over a rolling harp, a soft pad and bass. Slow and dreamy; little bells join the second time round.", "1:47"],
+  ["ours-bouncy", "Busy Little Ants (bouncy)", "A marimba tune over a strummed ukulele, bass, shaker and woodblock. Cheerful, with a gentle beat.", "1:11"],
+];
 const CALM = [
   ["morning-sky", "Morning Sky", "WindheartDev: a calm, chill theme for a relaxing morning. The quietest of all.", "2:12"],
   ["pretty", "Pretty", "Alex McCulloch: sparse and soft, with quiet stretches.", "1:54"],
@@ -88,6 +95,6 @@ document.querySelector(".copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(text); document.querySelector(".sum").textContent = "Copied!"; }
   catch { prompt("Copy this:", text); }
 });
-build(CALM, "calm"); build(BOUNCY, "bouncy");
+build(OURS, "ours"); build(CALM, "calm"); build(BOUNCY, "bouncy");
 document.querySelectorAll('input[name="pick"]').forEach(i => i.addEventListener("change", sum));
 </script></body></html>
