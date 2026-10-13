@@ -24,8 +24,11 @@ h1{margin:4px 0 6px;font-size:24px;text-wrap:balance}h2{font-size:17px;margin:24
 <p>One tune for every level, and no music on Home, the Journey or the Shop. Tap ▶ to listen (on a phone, turn the silent switch off first), tap <b>Pick this one</b> on your favourite, then <b>Copy my choice</b> and paste it to Claude.</p>
 <p>They play here at the same loudness so you can compare them; in the game the music sits quieter, under the sounds. Each one loops.</p>
 
-<h2>Made for Ant Farm</h2>
-<p>Our own two, written note by note and played by little synth instruments: no other game has them.</p>
+<h2>Three ant tunes (new)</h2>
+<p>Each from a moment in an ant's day, written note by note for Ant Farm.</p>
+<div id="ants"></div>
+<h2>Made for Ant Farm (earlier)</h2>
+<p>Our own two from before: Busy Little Ants is the one in the game now.</p>
 <div id="ours"></div>
 <h2>Calm</h2>
 <p>Free to use (CC0), from OpenGameArt. Slow and soft, for thinking.</p>
@@ -41,6 +44,11 @@ h1{margin:4px 0 6px;font-size:24px;text-wrap:balance}h2{font-size:17px;margin:24
 
 <div class="foot"><span class="sum">Nothing picked yet</span><button class="copy">Copy my choice</button></div>
 <script>
+const ANTS = [
+  ["ant-parade", "Ant Parade (march)", "The ants marching in line with their fruit: a piping flute tune over oom-pah bass and strummed chords, woodblock, snare, and a little drum roll at every corner. Bells join the second time round.", "1:06"],
+  ["down-in-the-nest", "Down in the Nest (groove)", "Underground and cozy: a kalimba tune with a lazy swing over a soft bass, a gentle kick, a rim tap and a shaker, warm pads behind. Marimba doubles it later.", "1:23"],
+  ["picnic-waltz", "Picnic Waltz", "Carrying fruit through the sunny meadow: a toy-piano tune in three over a strummed ukulele and bass, a triangle tinging. A flute joins for the middle part.", "1:22"],
+];
 const OURS = [
   ["ours-calm", "Under the Leaves (calm)", "A music box over a rolling harp, a soft pad and bass. Slow and dreamy; little bells join the second time round.", "1:47"],
   ["ours-bouncy", "Busy Little Ants (bouncy)", "A marimba tune over a strummed ukulele, bass, shaker and woodblock. Cheerful, with a gentle beat.", "1:11"],
@@ -95,6 +103,6 @@ document.querySelector(".copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(text); document.querySelector(".sum").textContent = "Copied!"; }
   catch { prompt("Copy this:", text); }
 });
-build(OURS, "ours"); build(CALM, "calm"); build(BOUNCY, "bouncy");
+build(ANTS, "ants"); build(OURS, "ours"); build(CALM, "calm"); build(BOUNCY, "bouncy");
 document.querySelectorAll('input[name="pick"]').forEach(i => i.addEventListener("change", sum));
 </script></body></html>
