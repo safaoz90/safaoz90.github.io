@@ -1,3 +1,3 @@
-# app-ads.txt for the games of developer website https://safaoz90.github.io (Aha! Brain Puzzles, Cozy Puzzles, Ant Farm)
-# Lists the ad networks allowed to sell this app's ads.
+# app-ads.txt for the games of developer website https://safaoz90.github.io (Aha! Brain Puzzles, Cozy Puzzles, Ant Farm,
+# Messenger: Last Warning). Lists the ad networks allowed to sell these apps' ads: one AdMob account for all of them.
 google.com, pub-4304941165699285, DIRECT, f08c47fec0942fa0
