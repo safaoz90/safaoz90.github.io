@@ -57,7 +57,7 @@ GAMES = [
         key="messenger", name="Messenger: Last Warning", icon="messenger-icon.png", accent="#2563c9",
         privacy="messenger-privacy.html", terms="messenger-terms.html", nav=[("messenger.html", "Support")],
         currency="coins", items="coins, crystals, lives, boosters, paint jobs and Season Pass rewards",
-        analytics=False, ads="att", revenuecat=False, icloud=True, notifications=None,
+        analytics=True, ads="att", revenuecat=False, icloud=True, notifications=None,
         age_gate=False, photos=False, share=False,
     ),
 ]
@@ -166,6 +166,7 @@ not run servers that store information about you.</p>"""))
         what = {
             "aha": "Events such as “puzzle started”, “puzzle solved” (time taken, mistakes, hints used, stars), “puzzle left”, your “Did you enjoy it?” vote, shop and video use, purchases made, shares, the age range you chose and what a watched video earned.",
             "antfarm": "Events such as “level started”, “level won” (with the seconds and taps it took), “shelf full”, “booster used” and “video watched”, each with the level number and counts.",
+            "messenger": "Events such as “level started”, “level won” or “level lost” (with the wave reached and the time spent playing), “booster used”, “video watched”, menus opened, research and purchases made, each with the level number and counts.",
         }[g["key"]]
         rows.append(["Gameplay statistics", what + " With them: a random identifier for the app installation, phone model, iOS and app version, language, approximate country or region (from the IP address) and session times.",
                      "To learn which levels are too hard, too easy or not fun, and to fix problems.", "Google (Firebase Analytics), as our service provider."])
