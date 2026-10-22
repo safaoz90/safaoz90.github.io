@@ -5,7 +5,8 @@ each game's own facts (what it stores, which services it uses, what it sells) si
     python3 tools/legal.py          writes privacy.html, terms.html (Aha! Brain Puzzles), cozy-*, antfarm-*, messenger-*
 
 The facts come from each game's code (checked 17 October 2026): Aha! Brain Puzzles (game-dev), Cozy Jigsaw Puzzles
-(game-puzzle), Ant Farm (ant-bridge) and Messenger: Last Warning (tower-defense). When a game starts or stops using a
+(game-puzzle), Ant Farm (ant-bridge) and Messenger: Last Warning (tower-defense); since 22 October 2026 all four ask
+Apple's tracking question (personalised ads for those who allow it) and include Meta's SDK to measure install ads. When a game starts or stops using a
 service, change its entry in GAMES, bump EFFECTIVE and run this again. The look is legal.css.
 """
 import html
@@ -13,7 +14,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-EFFECTIVE = "17 October 2026"
+EFFECTIVE = "22 October 2026"
 EMAIL = "safaoz90@icloud.com"
 
 
@@ -26,6 +27,7 @@ GOOGLE_PARTNERS = A("https://policies.google.com/technologies/partner-sites", "H
 FIREBASE_PRIVACY = A("https://firebase.google.com/support/privacy", "Privacy and Security in Firebase")
 APPLE_PRIVACY = A("https://www.apple.com/legal/privacy/", "Apple Privacy Policy")
 APPLE_EULA = A("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/", "Licensed Application End User License Agreement")
+META_PRIVACY = A("https://www.facebook.com/privacy/policy/", "Meta Privacy Policy")
 REVENUECAT_PRIVACY = A("https://www.revenuecat.com/privacy", "RevenueCat Privacy Policy")
 REFUNDS = A("https://reportaproblem.apple.com", "reportaproblem.apple.com")
 
@@ -36,29 +38,29 @@ GAMES = [
         key="aha", name="Aha! Brain Puzzles", icon="icon.svg", accent="#2f6c8f",
         privacy="privacy.html", terms="terms.html", nav=[("index.html", "Support")],
         currency="lamps", items="lamps (used for hints and to open puzzles)",
-        analytics=True, ads="npa", revenuecat=True, icloud=False, notifications="a daily puzzle reminder",
-        age_gate=True, photos=False, share=True,
+        analytics=True, ads="att", revenuecat=True, icloud=False, notifications="a daily puzzle reminder",
+        age_gate=True, photos=False, share=True, meta=True, privacy_choices=False,
     ),
     dict(
         key="cozy", name="Cozy Jigsaw Puzzles", icon="cozy-icon.png", accent="#b5653a",
         privacy="cozy-privacy.html", terms="cozy-terms.html", nav=[("cozy-credits.html", "Photo credits")],
         currency="hints", items="hints",
-        analytics=False, ads="npa", revenuecat=True, icloud=False, notifications=None,
-        age_gate=False, photos=True, share=False,
+        analytics=False, ads="att", revenuecat=True, icloud=False, notifications=None,
+        age_gate=False, photos=True, share=False, meta=True, privacy_choices=False,
     ),
     dict(
         key="antfarm", name="Ant Farm", icon="antfarm-icon.png", accent="#3f8a3c",
         privacy="antfarm-privacy.html", terms="antfarm-terms.html", nav=[],
         currency="coins", items="coins, lives and boosters",
-        analytics=True, ads="npa", revenuecat=False, icloud=True, notifications="a reminder when your lives are full again",
-        age_gate=False, photos=False, share=False,
+        analytics=True, ads="att", revenuecat=False, icloud=True, notifications="a reminder when your lives are full again",
+        age_gate=False, photos=False, share=False, meta=True, privacy_choices=False,
     ),
     dict(
         key="messenger", name="Messenger: Last Warning", icon="messenger-icon.png", accent="#2563c9",
         privacy="messenger-privacy.html", terms="messenger-terms.html", nav=[("messenger.html", "Support")],
         currency="coins", items="coins, crystals, lives, boosters, paint jobs and Season Pass rewards",
         analytics=True, ads="att", revenuecat=False, icloud=True, notifications=None,
-        age_gate=False, photos=False, share=False,
+        age_gate=False, photos=False, share=False, meta=True, privacy_choices=True,
     ),
 ]
 
@@ -137,7 +139,7 @@ CONTACT = f"""<div class="contact"><p><strong>Email:</strong> {A('mailto:' + EMA
 # ----------------------------------------------------------------------------------------------------- privacy
 def privacy(g):
     n = g["name"]
-    ads, analytics, rc, icloud = g["ads"], g["analytics"], g["revenuecat"], g["icloud"]
+    ads, analytics, rc, icloud, meta = g["ads"], g["analytics"], g["revenuecat"], g["icloud"], g["meta"]
     S = []
 
     S.append(("about", "Who we are and what this policy covers", f"""
@@ -174,6 +176,9 @@ not run servers that store information about you.</p>"""))
         idfa = (" If you allow tracking (see [[sec:ads]]), also your device’s advertising identifier (IDFA)." if ads == "att" else "")
         rows.append(["Advertising data", "Only when a rewarded video is requested or shown: device and network information (such as device model, iOS version, IP address, language, approximate location derived from the IP address), and how you interacted with the video." + idfa,
                      "To show, measure, cap and pay for the videos you choose to watch, and to prevent fraud.", "Google (AdMob) and the advertising partners it works with."])
+    if meta:
+        rows.append(["Install and purchase measurement", "When the Game is opened: that it was installed and opened, in-app purchases made (product and price), device and app information (such as device model, iOS and app version, language and time zone) and the IP address." + (" If you allow tracking (see [[sec:ads]]), also your device’s advertising identifier (IDFA)." if ads == "att" else ""),
+                     "To learn whether our ads on Facebook and Instagram lead to people installing and enjoying the Game.", "Meta (Facebook SDK)."])
     rows.append(["Purchases", "What you bought and when, and Apple’s transaction records. Apple handles payment; we never see your card, name, email or Apple Account." + (" RevenueCat receives an anonymous identifier created by the app, your purchase history and receipts from Apple, and basic device details." if rc else ""),
                  "To deliver what you bought, prevent double delivery and let you restore purchases.", "Apple" + (" and RevenueCat, as our service provider" if rc else "") + "."])
     if g["photos"]:
@@ -218,11 +223,13 @@ The Game then sends no statistics, never starts the video ad service and shows n
     # --- legal bases
     bases = [("Performance of a contract", "running the Game, saving your progress and delivering what you buy.")]
     if ads:
-        bases.append(("Consent", "where the law requires it (for example in the EEA, the UK and Switzerland), for the advertising partners’ use of your device for ads, collected through Google’s consent form" + (" and, for personalised ads, Apple’s tracking question" if ads == "att" else "") + ". You can withdraw consent at any time ([[sec:rights]])."))
+        bases.append(("Consent", "where the law requires it (for example in the EEA, the UK and Switzerland), for the advertising partners’ use of your device for ads, collected through Google’s consent form" + (" and, for personalised ads and for Meta’s use of your advertising identifier, Apple’s tracking question" if ads == "att" else "") + ". You can withdraw consent at any time ([[sec:rights]])."))
     if analytics:
         bases.append(("Legitimate interests", "measuring and improving the Game with statistics that do not identify you by name and are not used for advertising" + (", and showing non-personalised rewarded videos that keep the Game free" if ads else "") + "."))
     elif ads:
         bases.append(("Legitimate interests", "showing non-personalised rewarded videos that keep the Game free, and preventing fraud."))
+    if meta:
+        bases.append(("Legitimate interests", "measuring, in aggregate, whether our ads on Facebook and Instagram work."))
     bases.append(("Legal obligation", "keeping records and responding to lawful requests where the law requires it."))
     S.append(("bases", "Legal bases (EEA, UK and Switzerland)", "<p>Where the GDPR or similar laws apply, we rely on the following legal bases:</p>" +
               ul([f"<strong>{a}</strong>: {b}" for a, b in bases])))
@@ -233,11 +240,13 @@ The Game then sends no statistics, never starts the video ad service and shows n
         prow.append(["Google AdMob (Google LLC; Google Ireland Ltd. in the EEA and UK)", "Rewarded video ads and the consent form", "Showing, measuring and paying for the videos you choose to watch", f"{GOOGLE_PRIVACY}; {GOOGLE_PARTNERS}"])
     if analytics:
         prow.append(["Google Analytics for Firebase (Google LLC)", "Gameplay statistics, without the advertising identifier", "Understanding and improving the Game", f"{FIREBASE_PRIVACY}; {GOOGLE_PRIVACY}"])
+    if meta:
+        prow.append(["Meta Platforms, Inc. (Meta Platforms Ireland Ltd. in the EEA and UK)", "Facebook SDK, app events only", "Measuring our ads on Facebook and Instagram", META_PRIVACY])
     if rc:
         prow.append(["RevenueCat, Inc.", "Purchase records", "Checking and restoring purchases", REVENUECAT_PRIVACY])
     S.append(("partners", "Third-party services", "<p>The Game uses these services. Each processes information as described in its own policy:</p>" +
               table(["Provider", "Service", "Purpose", "Policy"], prow) +
-              "<p>We have chosen these services for their privacy and security commitments. We do not use social media sign-in, and the Game contains no social media plug-ins.</p>"))
+              "<p>We have chosen these services for their privacy and security commitments. We do not use social media sign-in, and the Game has no social media buttons or plug-ins" + (": Meta’s SDK in the Game only measures our ads" if meta else "") + ".</p>"))
 
     # --- advertising
     if ads:
@@ -250,7 +259,7 @@ and no videos you did not ask for. The videos are served by Google AdMob, which 
 networks it works with (its “ad sources”). Google acts as an independent controller for some of this information; its
 policies linked above apply.</p>"""
         if g["age_gate"]:
-            adtext += "<p>The video service is never started for players marked “Under 13”, and for everyone else only once videos are first offered (after 5 solved puzzles).</p>"
+            adtext += "<p>The video service is never started for players marked “Under 13”, and for everyone else only once videos are first offered.</p>"
         if ads == "npa":
             adtext += """<h3>No tracking, no personalised ads</h3>
 <p>The Game does <strong>not</strong> ask to track you, does not use your device’s advertising identifier (IDFA), and asks Google
@@ -266,9 +275,17 @@ Game asks Google for non-personalised ads only.</li></ul>
 <p>You can change your answer at any time in iOS Settings → Privacy &amp; Security → Tracking. The Game plays exactly the same
 either way. Ads are limited to content suitable for the Game’s age rating. Apple’s SKAdNetwork may also tell advertisers,
 in aggregate and without identifying you, that an ad led to an app being installed.</p>"""
+        if meta:
+            adtext += """<h3>Measuring our ads on Facebook and Instagram</h3>
+<p>We advertise the Game on Facebook and Instagram. To learn which ads lead to installs and purchases, the Game includes
+Meta’s SDK, which tells Meta when the Game is installed and opened and about purchases made in it (see [[sec:collect]]). It
+offers no Facebook sign-in or sharing and does not read your Facebook account. If you allow tracking, Meta may use your
+advertising identifier to measure these ads and to improve the ads it shows, including to you. If you do not, Meta receives
+no advertising identifier and the results reach us only in aggregate (through Apple’s SKAdNetwork and Meta’s Aggregated Event
+Measurement). Meta acts as an independent controller for some of this information; its policy linked above applies.</p>"""
         adtext += """<h3>Consent in the EEA, the UK and Switzerland</h3>
 <p>Where the law requires it, Google’s consent form is shown before any video is requested, and your choices there apply.""" + (
-            " You can change them later from “Privacy choices” in the Game’s Settings." if ads == "att" else " You can review your choices when the form is shown again.") + "</p>"
+            " You can change them later from “Privacy choices” in the Game’s Settings." if g["privacy_choices"] else " You can review your choices when the form is shown again.") + "</p>"
         S.append(("ads", "Advertising and tracking", adtext))
 
     # --- sharing
@@ -289,6 +306,8 @@ as the European Commission’s Standard Contractual Clauses or the EU–U.S. Dat
         ret.append(["Gameplay statistics", "Up to 14 months, then deleted automatically by Firebase."])
     if ads:
         ret.append(["Advertising data", "Kept by Google and its partners as described in their policies."])
+    if meta:
+        ret.append(["Install and purchase measurement", "Kept by Meta as described in its policy."])
     ret.append(["Purchase records", "Kept by Apple" + (" and RevenueCat" if rc else "") + " under their policies, for as long as needed to restore purchases and meet legal obligations."])
     ret.append(["Your emails to us", "Until your question is resolved, and normally deleted within 12 months."])
     S.append(("retention", "Data retention", "<p>We keep information only as long as needed for the purposes above:</p>" + table(["Information", "How long"], ret)))
@@ -302,7 +321,7 @@ or storage is completely secure, and we cannot guarantee absolute security.</p>"
         choices.append("Allow or stop tracking at any time in iOS Settings → Privacy &amp; Security → Tracking.")
     if ads:
         choices.append("Videos are optional: you can always play without them.")
-        choices.append("In the EEA, the UK and Switzerland, change your ad consent choices" + (" from “Privacy choices” in the Game’s Settings." if ads == "att" else " when Google’s form is shown."))
+        choices.append("In the EEA, the UK and Switzerland, change your ad consent choices" + (" from “Privacy choices” in the Game’s Settings." if g["privacy_choices"] else " when Google’s form is shown."))
     if g["age_gate"]:
         choices.append("Choose “Under 13” in Settings → Who’s playing to stop statistics and video ads.")
     if g["notifications"]:
@@ -321,7 +340,7 @@ you are, please tell us the game version and roughly when you played so that we 
 We will answer within one month. You also have the right to complain to your local data protection authority.</p>"""))
 
     # --- US states
-    sell = ("We do not sell personal information. When you allow tracking ([[sec:ads]]), the advertising partners’ use of your "
+    sell = ("We do not sell personal information. When you allow tracking ([[sec:ads]]), the advertising partners’ (Google’s and Meta’s) use of your "
             "advertising identifier and activity for personalised ads may count as “sharing” for cross-context behavioural advertising "
             "or “targeted advertising” under some state laws. You can opt out at any time by turning off tracking in iOS Settings → "
             "Privacy &amp; Security → Tracking, and we do not knowingly allow it for players under 16."
@@ -329,8 +348,8 @@ We will answer within one month. You also have the right to complain to your loc
             "We do not sell personal information, and we do not share it for cross-context behavioural advertising or use it for targeted advertising.")
     cats = ["identifiers (a random app-installation identifier, IP address" + (", and the advertising identifier if you allow tracking" if ads == "att" else "") + ")",
             "commercial information (records of in-app purchases)"]
-    if analytics or ads:
-        act = [x for x, on in (("gameplay events", analytics), ("interactions with videos", ads)) if on]
+    if analytics or ads or meta:
+        act = [x for x, on in (("gameplay events", analytics), ("interactions with videos", ads), ("app opens and purchases reported to Meta", meta)) if on]
         cats.append("internet or other electronic network activity (" + " and ".join(act) + ")")
         cats.append("approximate geolocation derived from the IP address")
     S.append(("us", "Additional information for U.S. residents", f"""<p>Residents of California and other U.S. states with privacy laws have the rights described in [[sec:rights]] to know about, access,
@@ -343,7 +362,8 @@ shared them only with the providers in [[sec:partners]].</p><p>{sell}</p>
     if g["age_gate"]:
         kids = """<p>The Game is not directed at children under 13 and is not in the App Store’s Kids category. When a parent or guardian chooses
 “Under 13” in Settings → Who’s playing, the Game collects no statistics, never starts the video ad service and shows no video
-offers, and sharing a puzzle needs a grown-up’s check first.</p>"""
+offers, and sharing a puzzle needs a grown-up’s check first. Meta’s SDK still reports that the Game was opened (see [[sec:ads]]),
+without the advertising identifier unless tracking is allowed on the device.</p>"""
     else:
         kids = "<p>The Game is not directed at children under 13 and is not in the App Store’s Kids category." + (
             " Ads are limited to content suitable for the Game’s age rating." if ads == "att" else "") + "</p>"
@@ -365,10 +385,12 @@ before it takes effect and, where the law requires it, ask for your consent.</p>
         glance.append("Videos are optional and not personalised. The Game never tracks you or uses your advertising identifier.")
     elif ads == "att":
         glance.append("Videos are optional. Ads are personalised only if you allow tracking in Apple’s question; you can change it in iOS Settings at any time.")
+    if meta:
+        glance.append("Meta’s SDK tells Meta when the Game is installed and opened, and about purchases, so we can measure our ads on Facebook and Instagram.")
     if g["photos"]:
         glance.append("Photos you turn into puzzles stay on your device and are never uploaded.")
     if g["age_gate"]:
-        glance.append("For players marked “Under 13”, the Game sends nothing at all: no statistics and no ads.")
+        glance.append("For players marked “Under 13”, the Game sends no statistics and shows no ads.")
     glance.append("Payments are handled by Apple. We never see your card or Apple Account.")
     glance.append("We do not sell your personal information.")
     page(g, "privacy", S, glance)
