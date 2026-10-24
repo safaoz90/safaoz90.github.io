@@ -14,8 +14,8 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-EFFECTIVE = "22 October 2026"
-EMAIL = "safaoz90@icloud.com"
+EFFECTIVE = "23 October 2026"
+EMAIL = "support@wozzly.com"
 
 
 def A(url, text=None):
@@ -38,7 +38,7 @@ GAMES = [
         key="aha", name="Aha! Brain Puzzles", icon="icon.svg", accent="#2f6c8f",
         privacy="privacy.html", terms="terms.html", nav=[("index.html", "Support")],
         currency="lamps", items="lamps (used for hints and to open puzzles)",
-        analytics=True, ads="att", revenuecat=True, icloud=False, notifications="a daily puzzle reminder",
+        analytics=True, ads="att", revenuecat=True, icloud=True, notifications="a daily puzzle reminder",
         age_gate=True, photos=False, share=True, meta=True, privacy_choices=False,
     ),
     dict(
