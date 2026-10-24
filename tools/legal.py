@@ -45,7 +45,7 @@ GAMES = [
         key="cozy", name="Cozy Jigsaw Puzzles", icon="cozy-icon.png", accent="#b5653a",
         privacy="cozy-privacy.html", terms="cozy-terms.html", nav=[("cozy-credits.html", "Photo credits")],
         currency="hints", items="hints",
-        analytics=False, ads="att", revenuecat=True, icloud=False, notifications=None,
+        analytics=True, ads="att", revenuecat=True, icloud=False, notifications=None,
         age_gate=False, photos=True, share=False, meta=True, privacy_choices=False,
     ),
     dict(
@@ -167,6 +167,7 @@ not run servers that store information about you.</p>"""))
     if analytics:
         what = {
             "aha": "Events such as “puzzle started”, “puzzle solved” (time taken, mistakes, hints used, stars), “puzzle left”, your “Did you enjoy it?” vote, shop and video use, purchases made, shares, the age range you chose and what a watched video earned.",
+            "cozy": "Events such as “puzzle started”, “puzzle finished” (the seconds played and hints used), “puzzle left” (how many pieces were placed), hint, shop and video use, purchases made and settings changed, each with the season, level and number of pieces. Never your photos or anything in them.",
             "antfarm": "Events such as “level started”, “level won” (with the seconds and taps it took), “shelf full”, “booster used” and “video watched”, each with the level number and counts.",
             "messenger": "Events such as “level started”, “level won” or “level lost” (with the wave reached and the time spent playing), “booster used”, “video watched”, menus opened, research and purchases made, each with the level number and counts.",
         }[g["key"]]
