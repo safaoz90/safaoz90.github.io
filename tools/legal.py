@@ -5,7 +5,7 @@ each game's own facts (what it stores, which services it uses, what it sells) si
     python3 tools/legal.py          writes privacy.html, terms.html (Aha! Brain Puzzles), cozy-*, antfarm-*, messenger-*
 
 The facts come from each game's code (checked 17 October 2026): Aha! Brain Puzzles (game-dev), Cozy Jigsaw Puzzles
-(game-puzzle), Ant Farm (ant-bridge) and Messenger: Last Warning (tower-defense); since 22 October 2026 all four ask
+(game-puzzle), Ant Farm (ant-bridge) and Last Warning: Tower Defense (tower-defense; "Messenger: Last Warning" until 30 Oct 2026); since 22 October 2026 all four ask
 Apple's tracking question (personalised ads for those who allow it) and include Meta's SDK to measure install ads. When a game starts or stops using a
 service, change its entry in GAMES, bump EFFECTIVE and run this again. The look is legal.css.
 """
@@ -56,7 +56,7 @@ GAMES = [
         age_gate=False, photos=False, share=False, meta=True, privacy_choices=False,
     ),
     dict(
-        key="messenger", name="Messenger: Last Warning", icon="messenger-icon.png", accent="#2563c9",
+        key="messenger", name="Last Warning: Tower Defense", icon="messenger-icon.png", accent="#2563c9",
         privacy="messenger-privacy.html", terms="messenger-terms.html", nav=[("messenger.html", "Support")],
         currency="coins", items="coins, crystals, lives, boosters, paint jobs and Season Pass rewards",
         analytics=True, ads="att", revenuecat=False, icloud=True, notifications=None,
