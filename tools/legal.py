@@ -168,10 +168,11 @@ not run servers that store information about you.</p>"""))
         what = {
             "aha": "Events such as “puzzle started”, “puzzle solved” (time taken, mistakes, hints used, stars), “puzzle left”, your “Did you enjoy it?” vote, shop and video use, purchases made, shares, the age range you chose and what a watched video earned.",
             "cozy": "Events such as “puzzle started”, “puzzle finished” (the seconds played and hints used), “puzzle left” (how many pieces were placed), hint, shop and video use, purchases made and settings changed, each with the season, level and number of pieces. Never your photos or anything in them.",
-            "antfarm": "Events such as “level started”, “level won” (with the seconds and taps it took), “shelf full”, “booster used” and “video watched”, each with the level number and counts.",
+            "antfarm": "Events such as “level started”, “level won” or “level lost” (with the seconds, taps and progress), “shelf full”, “booster used”, “video watched”, shop and Season Pass screens opened, purchases made, reminders allowed or opened and choices made in the comics, each with the level number and counts.",
             "messenger": "Events such as “level started”, “level won” or “level lost” (with the wave reached and the time spent playing), “booster used”, “video watched”, menus opened, research and purchases made, each with the level number and counts.",
         }[g["key"]]
-        rows.append(["Gameplay statistics", what + " With them: a random identifier for the app installation, phone model, iOS and app version, language, approximate country or region (from the IP address) and session times.",
+        who = (" With them: a random player identifier made by the Game (kept in your iCloud save, so your devices count as one player; never your name, email or Apple Account), phone model," if g["key"] in ("antfarm", "messenger") else " With them: a random identifier for the app installation, phone model,")
+        rows.append(["Gameplay statistics", what + who + " iOS and app version, language, approximate country or region (from the IP address) and session times.",
                      "To learn which levels are too hard, too easy or not fun, and to fix problems.", "Google (Firebase Analytics), as our service provider."])
     if ads:
         idfa = (" If you allow tracking (see [[sec:ads]]), also your device’s advertising identifier (IDFA)." if ads == "att" else "")
