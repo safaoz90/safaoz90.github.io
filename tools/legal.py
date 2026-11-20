@@ -28,6 +28,7 @@ FIREBASE_PRIVACY = A("https://firebase.google.com/support/privacy", "Privacy and
 APPLE_PRIVACY = A("https://www.apple.com/legal/privacy/", "Apple Privacy Policy")
 APPLE_EULA = A("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/", "Licensed Application End User License Agreement")
 META_PRIVACY = A("https://www.facebook.com/privacy/policy/", "Meta Privacy Policy")
+MICROSOFT_PRIVACY = A("https://privacy.microsoft.com/privacystatement", "Microsoft Privacy Statement")
 REVENUECAT_PRIVACY = A("https://www.revenuecat.com/privacy", "RevenueCat Privacy Policy")
 REFUNDS = A("https://reportaproblem.apple.com", "reportaproblem.apple.com")
 
@@ -61,6 +62,7 @@ GAMES = [
         currency="coins", items="coins, crystals, lives, boosters, paint jobs and Season Pass rewards",
         analytics=True, ads="att", revenuecat=False, icloud=True, notifications=None,
         age_gate=False, photos=False, share=False, meta=True, privacy_choices=True,
+        board=True, updated="20 November 2026",
     ),
 ]
 
@@ -108,7 +110,7 @@ def page(g, kind, sections, glance):
 <main class="wrap"><article class="doc">
 <p class="kicker">{html.escape(g['name'])}</p>
 <h1>{title}</h1>
-<p class="meta"><b>Effective date:</b> {EFFECTIVE} &nbsp;·&nbsp; <b>Last updated:</b> {EFFECTIVE}</p>
+<p class="meta"><b>Effective date:</b> {EFFECTIVE} &nbsp;·&nbsp; <b>Last updated:</b> {g.get('updated', EFFECTIVE)}</p>
 <aside class="glance"><h2>At a glance</h2><ul>{glancehtml}</ul></aside>
 <nav class="toc" aria-label="Contents"><h2>Contents</h2><ol>{''.join(toc)}</ol></nav>
 {chr(10).join(body)}
@@ -140,6 +142,7 @@ CONTACT = f"""<div class="contact"><p><strong>Email:</strong> {A('mailto:' + EMA
 def privacy(g):
     n = g["name"]
     ads, analytics, rc, icloud, meta = g["ads"], g["analytics"], g["revenuecat"], g["icloud"], g["meta"]
+    board = g.get("board", False)
     S = []
 
     S.append(("about", "Who we are and what this policy covers", f"""
@@ -150,8 +153,10 @@ law, such as the EU and UK General Data Protection Regulation (GDPR).</p>
 <p>This policy applies to the Game and to its pages on this website. It does not apply to the App Store, to iCloud or to the
 services of our partners, which have their own policies (linked in [[sec:partners]]). Please read it together with our
 {A(g['terms'], 'Terms of Service')}.</p>
-<p>The Game has <strong>no accounts</strong>: it never asks for your name, email address, phone number or password, and we do
-not run servers that store information about you.</p>"""))
+""" + ("""<p>The Game has <strong>no accounts</strong>: it never asks for your email address, phone number or password. For the weekly
+Last Stand leaderboard, our server keeps a random player id, the name you type (or the default name), the picture you choose,
+your country and your weekly scores; turning off “Show me in rankings” in Settings deletes them.</p>""" if board else """<p>The Game has <strong>no accounts</strong>: it never asks for your name, email address, phone number or password, and we do
+not run servers that store information about you.</p>""")))
 
     # --- what is collected
     rows = []
@@ -174,6 +179,9 @@ not run servers that store information about you.</p>"""))
         who = (" With them: a random player identifier made by the Game (kept in your iCloud save, so your devices count as one player; never your name, email or Apple Account), phone model," if g["key"] in ("antfarm", "messenger") else " With them: a random identifier for the app installation, phone model,")
         rows.append(["Gameplay statistics", what + who + " iOS and app version, language, approximate country or region (from the IP address) and session times.",
                      "To learn which levels are too hard, too easy or not fun, and to fix problems.", "Google (Firebase Analytics), as our service provider."])
+    if board:
+        rows.append(["Weekly leaderboard (Last Stand)", "A random player id, the commander name you type (or the default: your Game Center name or a call sign), the picture you choose, your country (from your device’s Region setting), your weekly scores and run numbers (waves, play time, app version), and names other players report.",
+                     "To show the weekly rankings and titles, and to review reported names.", "Microsoft Azure, our hosting provider (United States)."])
     if ads:
         idfa = (" If you allow tracking (see [[sec:ads]]), also your device’s advertising identifier (IDFA)." if ads == "att" else "")
         rows.append(["Advertising data", "Only when a rewarded video is requested or shown: device and network information (such as device model, iOS version, IP address, language, approximate location derived from the IP address), and how you interacted with the video." + idfa,
@@ -188,7 +196,7 @@ not run servers that store information about you.</p>"""))
                      "To turn your photo into a jigsaw puzzle.", "Nobody. Your photos are never uploaded."])
     rows.append(["Messages you send us", "Your email address and whatever you write, if you contact us.", "To answer you.", "Nobody."])
 
-    collect = f"""<p>The table below lists everything the Game handles. We do not ask for or collect your name, email address (unless you write to
+    collect = f"""<p>The table below lists everything the Game handles. We do not ask for or collect your """ + ("real name" if board else "name") + f""", email address (unless you write to
 us), contacts, precise location, health data or browsing history.</p>
 {table(["Information", "What it is", "Why", "Who receives it"], rows)}"""
     if g["photos"]:
@@ -244,6 +252,8 @@ The Game then sends no statistics, never starts the video ad service and shows n
         prow.append(["Google Analytics for Firebase (Google LLC)", "Gameplay statistics, without the advertising identifier", "Understanding and improving the Game", f"{FIREBASE_PRIVACY}; {GOOGLE_PRIVACY}"])
     if meta:
         prow.append(["Meta Platforms, Inc. (Meta Platforms Ireland Ltd. in the EEA and UK)", "Facebook SDK, app events only", "Measuring our ads on Facebook and Instagram", META_PRIVACY])
+    if board:
+        prow.append(["Microsoft Azure (Microsoft Corporation)", "Hosting of our leaderboard server (United States)", "Keeping the weekly Last Stand rankings", MICROSOFT_PRIVACY])
     if rc:
         prow.append(["RevenueCat, Inc.", "Purchase records", "Checking and restoring purchases", REVENUECAT_PRIVACY])
     S.append(("partners", "Third-party services", "<p>The Game uses these services. Each processes information as described in its own policy:</p>" +
@@ -310,11 +320,13 @@ as the European Commission’s Standard Contractual Clauses or the EU–U.S. Dat
         ret.append(["Advertising data", "Kept by Google and its partners as described in their policies."])
     if meta:
         ret.append(["Install and purchase measurement", "Kept by Meta as described in its policy."])
+    if board:
+        ret.append(["Weekly leaderboard", "Scores for 12 weeks; the player record until 12 months after your last run, or until you turn off “Show me in rankings”."])
     ret.append(["Purchase records", "Kept by Apple" + (" and RevenueCat" if rc else "") + " under their policies, for as long as needed to restore purchases and meet legal obligations."])
     ret.append(["Your emails to us", "Until your question is resolved, and normally deleted within 12 months."])
     S.append(("retention", "Data retention", "<p>We keep information only as long as needed for the purposes above:</p>" + table(["Information", "How long"], ret)))
-    S.append(("security", "Security", """<p>Information sent between the Game and our partners travels over encrypted connections (HTTPS). Because the Game has no accounts
-and we run no servers holding your data, there is very little about you that could be exposed. Still, no method of transmission
+    S.append(("security", "Security", """<p>Information sent between the Game""" + (", our leaderboard server" if board else "") + """ and our partners travels over encrypted connections (HTTPS). Because the Game has no accounts
+and """ + ("our server holds only the leaderboard’s data" if board else "we run no servers holding your data") + """, there is very little about you that could be exposed. Still, no method of transmission
 or storage is completely secure, and we cannot guarantee absolute security.</p>"""))
 
     # --- rights
@@ -330,6 +342,8 @@ or storage is completely secure, and we cannot guarantee absolute security.</p>"
         choices.append("Turn notifications on or off in the Game’s settings or in iOS Settings → Notifications.")
     if g["photos"]:
         choices.append("Allow or remove camera and photo access in iOS Settings → Privacy &amp; Security.")
+    if board:
+        choices.append("Turn off “Show me in rankings” in Settings to delete your name, picture, country and scores from our leaderboard server.")
     choices.append("Delete the Game to remove everything it stored on your device.")
     S.append(("rights", "Your choices and rights", "<h3>Choices in the Game and on your device</h3>" + ul(choices) + f"""
 <h3>Your data protection rights</h3>
@@ -377,7 +391,7 @@ date. If a change materially affects how your information is used, we will tell 
 before it takes effect and, where the law requires it, ask for your consent.</p>"""))
     S.append(("contact", "Contact us", "<p>For questions about this policy or your information, contact the developer of the Game (the data controller):</p>" + CONTACT))
 
-    glance = ["No account, no name, no email: the Game never asks who you are."]
+    glance = ["No account, no email: the Game never asks who you are (the weekly leaderboard keeps only a commander name, a picture, your country and your scores)." if g.get("board") else "No account, no name, no email: the Game never asks who you are."]
     glance.append("Your progress is saved on your device" + (" and in your own iCloud account" if icloud else "") + "; we never receive it.")
     if analytics:
         glance.append("Anonymous gameplay statistics (Google Firebase, without the advertising identifier) help us improve the levels.")
@@ -442,6 +456,9 @@ Services Terms, for your own non-commercial entertainment.</p>
         "Consumable Virtual Items are used up when you spend them.",
         "We may manage, regulate, change or remove Virtual Items, their prices and how they are earned, for example to balance the Game, without liability to you, except where the law provides otherwise.",
     ])))
+
+    if g.get("board"):
+        S.append(("rankings", "Weekly rankings", "<p>Rankings may include computer-controlled commanders.</p>"))
 
     buy = {
         "aha": [("Consumable", "lamp packs: used up as you spend the lamps; they cannot be restored."),
